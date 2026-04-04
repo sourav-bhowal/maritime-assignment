@@ -38,12 +38,12 @@ model Extraction {
   fileHash String
   mimeType String
 
-  documentType   String?
+  documentType   DocumentType?
   documentName   String?
-  category       String?
-  applicableRole String?
+  category       DocumentCategory?
+  applicableRole ApplicableRole?
 
-  confidence String?
+  confidence Confidence?
 
   holderName     String?
   dateOfBirth    DateTime?
@@ -79,6 +79,57 @@ model Extraction {
 enum ExtractionStatus {
   COMPLETE
   FAILED
+}
+
+enum DocumentType {
+  COC
+  COP_BT
+  COP_PSCRB
+  COP_AFF
+  COP_MEFA
+  COP_MECA
+  COP_SSO
+  COP_SDSD
+  ECDIS_GENERIC
+  ECDIS_TYPE
+  SIRB
+  PASSPORT
+  PEME
+  DRUG_TEST
+  YELLOW_FEVER
+  ERM
+  MARPOL
+  SULPHUR_CAP
+  BALLAST_WATER
+  HATCH_COVER
+  BRM_SSBT
+  TRAIN_TRAINER
+  HAZMAT
+  FLAG_STATE
+  OTHER
+}
+
+enum DocumentCategory {
+  IDENTITY
+  CERTIFICATION
+  STCW_ENDORSEMENT
+  MEDICAL
+  TRAINING
+  FLAG_STATE
+  OTHER
+}
+
+enum ApplicableRole {
+  DECK
+  ENGINE
+  BOTH
+  NA @map("N/A")
+}
+
+enum Confidence {
+  HIGH
+  MEDIUM
+  LOW
 }
 
 /**
@@ -148,14 +199,26 @@ model ExtractionMedical {
   extractionId String     @id
   extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
 
-  fitnessResult  String? // FIT | UNFIT | N/A
-  drugTestResult String? // NEGATIVE | POSITIVE | N/A
+  fitnessResult  FitnessResult?
+  drugTestResult DrugTestResult?
 
   restrictions String?
   specialNotes String?
   expiryDate   DateTime?
 
   @@map("extraction_medical")
+}
+
+enum FitnessResult {
+  FIT
+  UNFIT
+  NA @map("N/A")
+}
+
+enum DrugTestResult {
+  NEGATIVE
+  POSITIVE
+  NA @map("N/A")
 }
 
 /**
