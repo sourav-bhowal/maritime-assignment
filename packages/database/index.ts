@@ -28,3 +28,5 @@ export const prisma: ReturnType<typeof prismaClientSingleton> =
 
 // In development, cache the Prisma client instance in the globalThis object
 if (process.env.NODE_ENV !== "production") globalThis.prismaGlobal = prisma;
+
+export * from "./generated/prisma/client.js";
