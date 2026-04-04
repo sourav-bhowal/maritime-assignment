@@ -31,6 +31,11 @@
     },
     "apps/worker": {
       "name": "worker",
+      "dependencies": {
+        "@repo/database": "*",
+        "@repo/llm": "*",
+        "@repo/queue": "*",
+      },
       "devDependencies": {
         "@repo/typescript-config": "*",
         "@types/bun": "latest",

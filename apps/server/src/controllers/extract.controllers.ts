@@ -126,7 +126,7 @@ export const extractController = async (
         jobId: job.id,
         sessionId,
         status: "QUEUED",
-        pollUrl: `/api/jobs/${job.id}`,
+        pollUrl: `${process.env.SERVER_URL}/api/jobs/${job.id}`,
         estimatedWaitMs,
       });
       return;
@@ -198,7 +198,7 @@ export const extractController = async (
         isExpired: result.validity.isExpired,
         processingTimeMs,
         status: "COMPLETE",
-        rawLlmResponse: JSON.stringify(result),
+        rawLlmResponse: result.rawResponse ? JSON.stringify(result.rawResponse) : null,
         fields: {
           create: result.fields.map((f) => ({
             key: f.key,
