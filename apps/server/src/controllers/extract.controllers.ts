@@ -4,7 +4,11 @@ import { createLLM } from "@repo/llm";
 import type { ExtractionResult } from "@repo/llm";
 import { enqueueExtraction, getEstimatedWaitMs } from "@repo/queue";
 import { createAppError } from "../middleware/error-handler.js";
-import { formatExtractionResponse, parseDate } from "../lib/utils.js";
+import {
+  formatExtractionResponse,
+  mapNAEnum,
+  parseDate,
+} from "../lib/utils.js";
 import { NextFunction, Request, Response } from "express";
 import crypto from "crypto";
 
@@ -132,7 +136,6 @@ export const extractController = async (
     const startTime = Date.now();
 
     let result: ExtractionResult;
-    let rawResponse: string | undefined;
 
     try {
       result = await llm.extract(file.buffer, file.mimetype, file.originalname);
@@ -252,10 +255,3 @@ export const extractController = async (
     next(err);
   }
 };
-
-function mapNAEnum(value: string): any {
-  if (value === "N/A") {
-    return "NA";
-  }
-  return value;
-}

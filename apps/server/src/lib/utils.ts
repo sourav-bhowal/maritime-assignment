@@ -166,3 +166,10 @@ export function formatDate(date: Date | string): string {
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 }
+
+export function mapNAEnum(value: string): any {
+  if (value === "N/A") {
+    return "NA";
+  }
+  return value;
+}

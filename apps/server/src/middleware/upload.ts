@@ -2,7 +2,7 @@ import multer from "multer";
 
 /**
  * Multer config for file uploads.
- * Stores files in memory (Buffer) — no disk persistence.
+ * Stores files in memory (Buffer) — no disk persistence. Because we are using the queue, we don't need to store the file on the disk.
  * Max file size: 10MB.
  */
 export const upload = multer({
