@@ -1,5 +1,9 @@
 import { prisma } from "@repo/database";
-import { validateFile, extractQuerySchema } from "@repo/validation";
+import {
+  validateFile,
+  extractQuerySchema,
+  extractBodySchema,
+} from "@repo/validation";
 import { createLLM } from "@repo/llm";
 import type { ExtractionResult } from "@repo/llm";
 import { enqueueExtraction, getEstimatedWaitMs } from "@repo/queue";
@@ -48,7 +52,7 @@ export const extractController = async (
     const mode = query.mode;
 
     // Session — use provided or create new
-    let sessionId = req.body?.sessionId;
+    let sessionId = extractBodySchema.parse(req.body).sessionId;
     if (!sessionId) {
       const session = await prisma.session.create({ data: {} });
       sessionId = session.id;
@@ -198,7 +202,9 @@ export const extractController = async (
         isExpired: result.validity.isExpired,
         processingTimeMs,
         status: "COMPLETE",
-        rawLlmResponse: result.rawResponse ? JSON.stringify(result.rawResponse) : null,
+        rawLlmResponse: result.rawResponse
+          ? JSON.stringify(result.rawResponse)
+          : null,
         fields: {
           create: result.fields.map((f) => ({
             key: f.key,
