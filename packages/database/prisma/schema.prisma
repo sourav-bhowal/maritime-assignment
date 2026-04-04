@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  runtime  = "bun"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/**
+ * Session represents a user's interaction session, which can include multiple document extractions, validation checks, and associated jobs.
+ * It serves as a container for all related activities and data during a user's session.
+ */
+model Session {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  extractions Extraction[]
+  jobs        Job[]
+  validations Validation[]
+
+  @@map("sessions")
+}
+
+/**
+ * Extraction represents the result of processing a single document within a session.
+ * It includes metadata about the document, extracted fields, validity information, medical information (if applicable),
+ * and any flags raised during extraction. Each extraction is associated with a session and can have one related job for processing.
+ */
+model Extraction {
+  id String @id @default(uuid())
+
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  fileName String
+  fileHash String
+  mimeType String
+
+  documentType   String?
+  documentName   String?
+  category       String?
+  applicableRole String?
+
+  confidence String?
+
+  holderName     String?
+  dateOfBirth    DateTime?
+  nationality    String?
+  passportNumber String?
+  sirbNumber     String?
+
+  summary String?
+
+  isExpired        Boolean @default(false)
+  processingTimeMs Int?
+
+  status ExtractionStatus @default(COMPLETE)
+
+  rawLlmResponse String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields   ExtractionField[]
+  validity ExtractionValidity?
+  medical  ExtractionMedical?
+  flags    ExtractionFlag[]
+  job      Job?
+
+  @@unique([sessionId, fileHash]) // deduplication
+  @@index([sessionId])
+  @@index([documentType])
+  @@index([isExpired])
+  @@map("extractions")
+}
+
+enum ExtractionStatus {
+  COMPLETE
+  FAILED
+}
+
+/**
+ * ExtractionField represents a single key-value pair extracted from a document during the extraction process.
+ * Each field is associated with a specific extraction and includes metadata about its importance and status.
+ */
+
+model ExtractionField {
+  id String @id @default(uuid())
+
+  extractionId String
+  extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+
+  key   String
+  label String
+  value String
+
+  importance ExtractionFieldImportance // CRITICAL | HIGH | MEDIUM | LOW
+  status     ExtractionFieldStatus // OK | EXPIRED | WARNING | MISSING
+
+  @@index([extractionId])
+  @@index([key])
+  @@map("extraction_fields")
+}
+
+enum ExtractionFieldImportance {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ExtractionFieldStatus {
+  OK
+  EXPIRED
+  WARNING
+  MISSING
+}
+
+/**
+ * ExtractionValidity represents the validity information of a document extraction, such as issue and expiry dates,
+ * and whether the document is expired or requires revalidation.
+ * It is associated with a specific extraction and provides insights into the document's current validity status.
+ */
+
+model ExtractionValidity {
+  extractionId String     @id
+  extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+
+  dateOfIssue  DateTime?
+  dateOfExpiry DateTime?
+
+  isExpired            Boolean?
+  daysUntilExpiry      Int?
+  revalidationRequired Boolean?
+
+  @@map("extraction_validity")
+}
+
+/**
+ * ExtractionMedical represents the medical information extracted from a document, such as fitness and drug test results,
+ * any restrictions or special notes, and the expiry date of the medical information. It is associated with a specific extraction
+ * and provides insights into the individual's medical status based on the extracted document.
+ */
+
+model ExtractionMedical {
+  extractionId String     @id
+  extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+
+  fitnessResult  String? // FIT | UNFIT | N/A
+  drugTestResult String? // NEGATIVE | POSITIVE | N/A
+
+  restrictions String?
+  specialNotes String?
+  expiryDate   DateTime?
+
+  @@map("extraction_medical")
+}
+
+/**
+ * ExtractionFlag represents any flags raised during the extraction process,
+ * such as issues with specific fields or overall concerns about the document.
+ * Each flag includes a severity level and a message describing the issue.
+ * Flags are associated with a specific extraction and can be used to highlight potential problems or areas that require attention.
+ */
+
+model ExtractionFlag {
+  id String @id @default(uuid())
+
+  extractionId String
+  extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+
+  severity ExtractionFlagSeverity // CRITICAL | HIGH | MEDIUM | LOW
+  message  String
+
+  @@index([extractionId])
+  @@index([severity])
+  @@map("extraction_flags")
+}
+
+enum ExtractionFlagSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+/**
+ * Job represents a processing task associated with a session, such as running an extraction or validation.
+ * Each job has a status, timestamps for when it was queued, started, and completed, and can include error information if it fails.
+ * Jobs are linked to sessions and can optionally be linked to a specific extraction if they are related to processing that extraction.
+ */
+
+model Job {
+  id String @id @default(uuid())
+
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id])
+
+  extractionId String?     @unique
+  extraction   Extraction? @relation(fields: [extractionId], references: [id])
+
+  status JobStatus @default(QUEUED)
+
+  errorCode    String?
+  errorMessage String?
+  retryable    Boolean @default(true)
+
+  queuedAt    DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@index([status])
+  @@index([sessionId])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  QUEUED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+/**
+ * Validation represents the result of validating a session's extractions, including an overall status and score,
+ * a summary of the validation, and the full structured response from the validation process. Each validation is associated with a specific session.
+ */
+
+model Validation {
+  id String @id @default(uuid())
+
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  overallStatus ValidationStatus? // APPROVED | CONDITIONAL | REJECTED
+  overallScore  Int?
+
+  summary String?
+
+  resultJson Json // full structured LLM response
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@map("validations")
+}
+
+enum ValidationStatus {
+  APPROVED
+  CONDITIONAL
+  REJECTED
+}
