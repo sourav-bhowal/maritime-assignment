@@ -1,5 +1,5 @@
 {
-  "name": "queue",
+  "name": "@repo/queue",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -9,5 +9,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "bullmq": "^5.73.0"
   }
 }
