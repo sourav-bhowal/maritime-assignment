@@ -47,6 +47,11 @@ export const extractController = async (
       throw createAppError(fileCheck.message, statusCode, fileCheck.code);
     }
 
+    // Claude will not accept pdf files, so throw error 
+    if (file.mimetype === "application/pdf" && process.env.LLM_PROVIDER === "claude") {
+      throw createAppError("PDF files are not supported with Claude", 400, "UNSUPPORTED_FILE_TYPE");
+    }
+
     // Parse query params
     const query = extractQuerySchema.parse(req.query);
     const mode = query.mode;

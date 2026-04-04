@@ -4,118 +4,62 @@
 
 ## Question 1 — Sync vs Async
 
-**Decision:** In production, **async should be the default mode.**
+**Decision:** In production, **async should be the default.**
 
-Maritime documents — especially multi-page PDFs of medical exams and certificates — can take 5–15 seconds to process through a vision LLM. Holding an HTTP connection open for that long is risky: clients may time out, load balancers may kill the connection, and in a multi-user scenario, you quickly exhaust your server's connection pool.
+Maritime PDFs and scans often need **5–15 seconds** of vision LLM work. Long HTTP requests invite client timeouts, load balancer idle cuts, and **connection-pool exhaustion** under concurrent users. Async returns **202** with a `jobId` quickly; the client polls and can show progress — a better fit when a Manning Agent uploads many documents.
 
-Async mode returns a `202 Accepted` with a `jobId` in under 100ms, letting the client display a progress indicator and poll at its own pace. This is a better UX for the Manning Agent uploading a stack of 8+ documents.
-
-**When to force async regardless of the `mode` param:**
-
-- **File size > 2MB** — larger files take longer for both base64 encoding and LLM vision processing.
-- **Concurrent in-flight extractions > 5** — if the server already has 5 sync extractions running, any additional request should be automatically routed to async to prevent thread pool starvation.
-- **PDF files** — PDFs often require additional processing time and should default to async.
-
-Sync mode is still useful for development, testing, and lightweight single-image uploads where the caller wants a simple request-response cycle.
+**Force async even if `mode=sync`:** **file size > 2MB**; **more than five sync extractions already in flight** (avoid starving the server); **PDF uploads** (heavier pipeline). **Sync** stays for dev, automated tests, and small single-image calls that want a simple request–response.
 
 ---
 
 ## Question 2 — Queue Choice
 
-**Choice:** An in-process queue backed by a database polling table (the `jobs` table in PostgreSQL).
+**Choice:** Worker polls PostgreSQL **`jobs`** using **`SELECT … FOR UPDATE SKIP LOCKED`** (configurable interval, default ~1s).
 
-**Why this approach:**
+**Why:** No Redis or message broker for this assignment footprint; state is **durable** across restarts (unlike a pure in-memory queue); **`GET /api/jobs/:jobId`** is a normal read — no second state store.
 
-1. **Zero infrastructure overhead** — no Redis, no RabbitMQ, no separate process. The service starts with `bun run dev` and works immediately.
-2. **Durable by default** — job state is in PostgreSQL, so it survives server restarts. No jobs are lost on crash. This is the primary advantage over a pure in-memory queue.
-3. **Queryable** — the `GET /api/jobs/:jobId` endpoint is a simple database read. No need to maintain a separate state store.
+**If load reached ~500 extractions/minute:** **BullMQ on Redis** for named queues, concurrency caps, retries with backoff, **per-queue rate limits** aligned to LLM provider quotas, and **Bull Board** for ops. The **job state machine** and **`LLMProvider`** boundary stay; only the transport changes.
 
-The worker process polls the `jobs` table on a configurable interval (default: 1 second), picks up `QUEUED` jobs with a `SELECT ... FOR UPDATE SKIP LOCKED` pattern to prevent double-processing, and runs them through the LLM pipeline.
+**Failure modes today:** **Polling delay** (up to one interval before pickup); **no built-in backpressure** when the model is slow; **multi-instance** workers need `SKIP LOCKED` (or a distributed queue) to avoid duplicate work.
 
-**Migration to 500 concurrent extractions/minute:**
+---
 
-I would migrate to **BullMQ with Redis**. BullMQ provides:
+## Rate limiting
 
-- Named queues with configurable concurrency limits
-- Built-in retry with exponential backoff
-- Rate limiting per queue (critical for LLM API rate limits)
-- Dashboard (Bull Board) for ops visibility
+**Decision:** **`POST /api/extract` only** — in-memory **token bucket**, **10 requests per minute per client IP** over a rolling **60s** window, per the spec. When exhausted, respond with **429**, body code **`RATE_LIMITED`**, **`retryAfterMs`**, and HTTP **`Retry-After`** (seconds). Buckets for quiet IPs are **pruned on a timer** so the `Map` does not grow without bound.
 
-The `LLMProvider` interface and job state machine would stay the same — only the queue transport layer changes.
-
-**Failure modes of current approach:**
-
-- **Polling latency** — a 1-second poll interval adds up to 1 second of unnecessary delay. Acceptable for < 50 jobs/minute, not for high throughput.
-- **No backpressure** — if the LLM provider is slow or rate-limited, there is no built-in mechanism to slow down the queue. The worker will keep picking up jobs.
-- **Single-node** — the polling pattern works on a single server. Scaling to multiple workers requires the `SKIP LOCKED` pattern or a proper distributed queue.
+**Tradeoff:** Limits are **per server process**. Several replicas each enforce their own cap; users behind **NAT** share one bucket; reverse proxies can make **`req.ip`** misleading unless **`X-Forwarded-For`** is configured carefully. Production would move limits to **Redis**, an **API gateway**, or both.
 
 ---
 
 ## Question 3 — LLM Provider Abstraction
 
-**Decision:** I built a provider interface that makes swapping LLMs trivial.
+**Decision:** A small **provider interface** so swapping models/vendors is an env change, not a refactor.
 
-The `LLMProvider` interface has two methods:
+**Surface:** `extract(fileBuffer, mimeType, fileName)` and `validate(extractions)` returning typed results. Concrete providers extend **`BaseLLMProvider`**: **`withTimeout`** (30s ceiling) and **`safeParse`** (outermost JSON boundary, then a **repair** LLM call on failure). **`LLM_PROVIDER`** (plus model/key env vars) selects the implementation via **`createLLM()`**.
 
-```typescript
-interface LLMProvider {
-  extract(fileBuffer: Buffer, mimeType: string, fileName: string): Promise<ExtractionResult>;
-  validate(extractions: ExtractionResult[]): Promise<ValidationResult>;
-}
-```
-
-Each provider (Claude, Gemini, OpenAI) implements this interface and extends `BaseLLMProvider`, which provides shared utilities:
-
-- `withTimeout(promise)` — races any LLM call against a 30-second deadline
-- `safeParse(raw, repairFn)` — attempts `extractJson()`, and on failure calls the provider-specific `repairFn` to ask the LLM to fix its own malformed output
-
-The active provider is selected at startup by `LLM_PROVIDER` env var. The `createLLM()` factory function returns the concrete instance. No code changes required to swap providers.
-
-**Justification:** The assignment explicitly requires provider swapping via environment variables. Beyond that, this abstraction has real production value — we test against Claude in dev but may deploy with Gemini for cost reasons, or fall back to a local Ollama instance when the cloud API is down.
+**Why:** Matches the assignment’s **env-configurable** requirement and mirrors how we would run **different providers per environment** or shift for cost, latency, or outage fallback.
 
 ---
 
 ## Question 4 — Schema Design
 
-The schema normalizes dynamic fields instead of dumping them into JSONB columns.
+**Approach:** **Normalize** volatile extraction output instead of stuffing dynamic fields into JSONB. **`ExtractionField`** rows (`key`, `label`, `value`, `importance`, `status`) support **indexed filters** without GIN-on-JSON gymnastics. **`ExtractionValidity`** and **`ExtractionMedical`** are **1:1** with **`Extraction`**; **`ExtractionFlag`** is keyed by **`severity`** for “all CRITICAL flags” style queries. **`Validation`** keeps a single **`resultJson`** — written once, read as a whole; no strong case to explode it into tables.
 
-**Key design choices:**
+**JSONB/TEXT risks at scale:** expensive or low-selectivity **GIN** indexes on heterogeneous keys; **shape drift** when prompts change; **full-text** and ad hoc search are painful without extra columns or materialization.
 
-- `ExtractionField` is a separate table with `key`, `label`, `value`, `importance`, `status` — one row per extracted field. This enables direct SQL queries like "find all sessions where any document has an expired COC."
-- `ExtractionValidity` and `ExtractionMedical` are 1:1 relation tables on `Extraction`, avoiding JSONB while keeping the data structured.
-- `ExtractionFlag` is a separate table indexed on `severity`, enabling queries like "all CRITICAL flags across all sessions."
-- The `Validation` model uses a single `resultJson` (JSON column) because validation results are read-heavy, write-once, and consumed as a unit. Unlike extracted fields, there is no query pattern that would benefit from normalization.
+**Full-text across field values:** add **`search_text`** `tsvector` on **`ExtractionField`**, maintain with an **INSERT/UPDATE trigger**, and index with **GIN** for `tsquery`.
 
-**Risks of JSONB/TEXT at scale:**
-
-- **No indexing** — you cannot index individual keys inside a JSONB column without GIN indexes, which are expensive to maintain and have poor selectivity on heterogeneous data.
-- **Schema drift** — when the LLM prompt evolves, old JSONB records have a different shape than new ones. Without a schema migration, application code must handle every historical variant.
-- **Full-text search** — searching inside JSONB requires `jsonb_to_tsvector` or casting to text, both of which are slow without materialized views.
-
-**If we needed full-text search across extracted fields:** I would add a `search_text` tsvector column on `ExtractionField`, populated by a trigger on INSERT/UPDATE. Combined with a GIN index, this enables fast `ts_query` searches across all field values.
-
-**For "all sessions where any document has an expired COC":**
-
-```sql
-SELECT DISTINCT e.session_id
-FROM extractions e
-WHERE e.document_type = 'COC' AND e.is_expired = true;
-```
-
-This is a simple indexed query — no JSONB scanning required.
+**Example — sessions with an expired COC:** filter **`extractions`** on **`document_type = 'COC'`** and **`is_expired`** (indexed) — no JSON scan.
 
 ---
 
 ## Question 5 — What I Skipped
 
-1. **Authentication and authorization** — the API has no auth layer. In production, the Manning Agent would authenticate via JWT or API key, and each session would be scoped to a tenant. I skipped this because the assignment focuses on the LLM pipeline, not identity management.
-
-2. **File storage** — uploaded documents are processed in-memory and not persisted to disk or object storage. In production, files should go to S3/GCS with signed URLs, and only the hash should be stored in the database. I skipped this to avoid infrastructure dependencies.
-
-3. **Structured logging and observability** — the service uses `console.log`. In production, I would add structured JSON logging (pino), request tracing (OpenTelemetry), and metrics (Prometheus) — especially on LLM call latency, parse failure rates, and retry counts.
-
-4. **Webhook delivery** — the async job mode only supports polling. In production, I would add an optional `webhookUrl` field and deliver results via HTTP POST with HMAC signature verification.
-
-5. **Prompt versioning** — the extraction prompt is a hardcoded constant. In production, prompts should be versioned (e.g., `v1`, `v2`), stored alongside each extraction record, and compared across versions to measure accuracy regressions.
+1. **Authentication / tenancy** — no JWT or API keys; production would scope sessions to a tenant. Deferred to keep focus on the extraction pipeline.
+2. **Object storage for uploads** — files are processed **in memory**, not S3/GCS; prod would store bytes off-box and keep **hash + metadata** in DB.
+3. **Structured logging and metrics** — **`console.log`** today; prod would use **JSON logs**, **traces**, and **LLM latency / parse-failure** metrics.
+4. **Async webhooks** — only **polling** for job completion; optional **`webhookUrl` + HMAC** would be next.
+5. **Prompt versioning** — extraction prompt is fixed in code; prod would **version** and persist **`promptVersion`** per row for regression analysis.
 
 ---
