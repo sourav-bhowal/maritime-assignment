@@ -116,13 +116,13 @@ export function validateFile(file: {
 // ─── GET /api/jobs/:jobId — Params ──────────────────────────────────
 
 export const jobParamsSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.uuid(),
 });
 
 // ─── GET /api/sessions/:sessionId — Params ──────────────────────────
 
 export const sessionParamsSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: z.uuid(),
 });
 
 // ─── POST /api/sessions/:sessionId/validate — No body needed ────────
@@ -270,7 +270,7 @@ export const ErrorCodeEnum = z.enum([
 export const errorResponseSchema = z.object({
   error: ErrorCodeEnum,
   message: z.string(),
-  extractionId: z.string().uuid().nullable().optional(),
+  extractionId: z.uuid().nullable().optional(),
   retryAfterMs: z.number().nullable().optional(),
 });
 

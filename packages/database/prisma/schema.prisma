@@ -123,7 +123,7 @@ enum ApplicableRole {
   DECK
   ENGINE
   BOTH
-  NA @map("N/A")
+  NA
 }
 
 enum Confidence {
@@ -212,13 +212,13 @@ model ExtractionMedical {
 enum FitnessResult {
   FIT
   UNFIT
-  NA @map("N/A")
+  NA
 }
 
 enum DrugTestResult {
   NEGATIVE
   POSITIVE
-  NA @map("N/A")
+  NA
 }
 
 /**

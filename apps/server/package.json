@@ -3,11 +3,24 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun --watch index.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^1",
     "@repo/typescript-config": "*"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@repo/database": "*",
+    "@repo/validation": "*",
+    "@repo/llm": "*",
+    "@repo/queue": "*",
+    "express": "^5.2.1",
+    "multer": "^1.4.5-lts.2"
   }
 }

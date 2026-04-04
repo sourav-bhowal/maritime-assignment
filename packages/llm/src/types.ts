@@ -1,23 +1,65 @@
-/**
- * Detection metadata from LLM document analysis.
+/** * Detection metadata from LLM document analysis.
  */
 export interface Detection {
-  documentType: string;
+  documentType: DocumentTypeEnum;
   documentName: string;
-  category:
-    | "IDENTITY"
-    | "CERTIFICATION"
-    | "STCW_ENDORSEMENT"
-    | "MEDICAL"
-    | "TRAINING"
-    | "FLAG_STATE"
-    | "OTHER";
-  applicableRole: "DECK" | "ENGINE" | "BOTH" | "N/A";
+  category: DocumentCategoryEnum;
+  applicableRole: ApplicableRoleEnum;
   isRequired: boolean;
-  confidence: "HIGH" | "MEDIUM" | "LOW";
+  confidence: ConfidenceEnum;
   detectionReason: string;
 }
 
+export enum ConfidenceEnum {
+  HIGH = "HIGH",
+  MEDIUM = "MEDIUM",
+  LOW = "LOW",
+}
+
+export enum DocumentCategoryEnum {
+  IDENTITY = "IDENTITY",
+  CERTIFICATION = "CERTIFICATION",
+  STCW_ENDORSEMENT = "STCW_ENDORSEMENT",
+  MEDICAL = "MEDICAL",
+  TRAINING = "TRAINING",
+  FLAG_STATE = "FLAG_STATE",
+  OTHER = "OTHER",
+}
+
+export enum ApplicableRoleEnum {
+  DECK = "DECK",
+  ENGINE = "ENGINE",
+  BOTH = "BOTH",
+  NA = "N/A",
+}
+
+export enum DocumentTypeEnum {
+  COC = "COC",
+  COP_BT = "COP_BT",
+  COP_PSCRB = "COP_PSCRB",
+  COP_AFF = "COP_AFF",
+  COP_MEFA = "COP_MEFA",
+  COP_MECA = "COP_MECA",
+  COP_SSO = "COP_SSO",
+  COP_SDSD = "COP_SDSD",
+  ECDIS_GENERIC = "ECDIS_GENERIC",
+  ECDIS_TYPE = "ECDIS_TYPE",
+  SIRB = "SIRB",
+  PASSPORT = "PASSPORT",
+  PEME = "PEME",
+  DRUG_TEST = "DRUG_TEST",
+  YELLOW_FEVER = "YELLOW_FEVER",
+  ERM = "ERM",
+  MARPOL = "MARPOL",
+  SULPHUR_CAP = "SULPHUR_CAP",
+  BALLAST_WATER = "BALLAST_WATER",
+  HATCH_COVER = "HATCH_COVER",
+  BRM_SSBT = "BRM_SSBT",
+  TRAIN_TRAINER = "TRAIN_TRAINER",
+  HAZMAT = "HAZMAT",
+  FLAG_STATE = "FLAG_STATE",
+  OTHER = "OTHER",
+}
 /**
  * Holder information extracted from the document.
  */
@@ -39,7 +81,7 @@ export interface ExtractedField {
   label: string;
   value: string;
   importance: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
-  status: "OK" | "EXPIRED" | "WARNING" | "MISSING" | "N/A";
+  status: "OK" | "EXPIRED" | "WARNING" | "MISSING";
 }
 
 /**
@@ -68,11 +110,23 @@ export interface Compliance {
  * Medical data extracted from the document.
  */
 export interface MedicalData {
-  fitnessResult: "FIT" | "UNFIT" | "N/A";
-  drugTestResult: "NEGATIVE" | "POSITIVE" | "N/A";
+  fitnessResult: FitnessResultEnum;
+  drugTestResult: DrugTestResultEnum;
   restrictions: string | null;
   specialNotes: string | null;
   expiryDate: string | null;
+}
+
+export enum FitnessResultEnum {
+  FIT = "FIT",
+  UNFIT = "UNFIT",
+  NA = "N/A",
+}
+
+export enum DrugTestResultEnum {
+  NEGATIVE = "NEGATIVE",
+  POSITIVE = "POSITIVE",
+  NA = "N/A",
 }
 
 /**
