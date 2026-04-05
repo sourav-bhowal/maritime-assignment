@@ -163,6 +163,8 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
 
   const processingTimeMs = Date.now() - startTime;
 
+  console.log("Result from LLM:", result);
+
   // Store the extraction result
   const extraction = await prisma.extraction.create({
     data: {
@@ -215,7 +217,7 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
               : null,
           isExpired: result.validity.isExpired,
           daysUntilExpiry: result.validity.daysUntilExpiry,
-          revalidationRequired: result.validity.revalidationRequired,
+          revalidationRequired: result.validity.isExpired ? true : false,
         },
       },
       medical: {

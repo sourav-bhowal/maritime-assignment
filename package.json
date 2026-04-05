@@ -7,6 +7,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
+    "postinstall": "cd packages/database && bunx --bun prisma generate",
     "start:server": "cd apps/server && bun run index.ts",
     "start:worker": "cd apps/worker && bun run index.ts"
   },

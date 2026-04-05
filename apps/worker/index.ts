@@ -88,7 +88,7 @@ async function processExtractionJob(job: Job<ExtractionJobData, ExtractionJobRes
                 : null,
             isExpired: result.validity.isExpired,
             daysUntilExpiry: result.validity.daysUntilExpiry,
-            revalidationRequired: result.validity.revalidationRequired,
+            revalidationRequired: result.validity.isExpired ? true : false,
           },
         },
         medical: {
