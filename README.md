@@ -35,6 +35,67 @@ bun run start:server
 bun run start:worker
 ```
 
+## Project Explanation
+
+This project is a production-style backend for document extraction, validation, and compliance checks.
+It supports both **sync** processing (instant response) and **async** processing (queued background jobs), so clients can choose between low-latency results and high-throughput reliability.
+
+
+## System Architecture Diagram
+
+```
++------------------------+
+| Client / API Consumer  |
++-----------+------------+
+            |
+            v
++------------------------+
+| Server API             |
+| apps/server            |
++-----------+------------+
+            |
+   +--------+--------+
+   |                 |
+   v                 v
+(Sync Mode)     (Async Mode)
+   |                 |
+   v                 v
++----------------+   +------------------------+
+| LLM Package    |   | Queue (Redis / BullMQ) |
+| packages/llm   |   | packages/queue         |
++----------------+   +-----------+------------+
+                                |
+                                v
+                      +------------------------+
+                      | Worker                 |
+                      | apps/worker            |
+                      +-----------+------------+
+                                  |
+                                  v
+                          +----------------+
+                          | LLM Package    |
+                          | packages/llm   |
+                          +----------------+
+
+        <---------------------------------------->
+        |                                        |
+        v                                        v
++------------------------+        +------------------------+
+| PostgreSQL             |        | PostgreSQL             |
+| Prisma / packages/db   |        | Prisma / packages/db   |
++------------------------+        +------------------------+
+```
+
+### Request Flow (high level)
+
+- `POST /api/extract` (sync): API receives file, extracts immediately, stores result, returns response.
+- `POST /api/extract` (async): API validates input, enqueues job, returns job/session reference.
+- Worker consumes queued jobs, performs extraction via provider layer, persists output to DB.
+- `POST /api/sessions/:sessionId/validate`: runs validation/compliance checks on extracted session data.
+
+This separation keeps the API responsive under load while allowing workers to scale independently for heavy processing.
+
+
 ## API Documentation
 
 Complete route-level documentation (request formats, response shapes, and error codes) is available at:
