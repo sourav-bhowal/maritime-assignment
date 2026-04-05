@@ -1,15 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { BaseLLMProvider } from "./provider.js";
-import type {
-  LLMProvider,
-  ExtractionResult,
-  ValidationResult,
-} from "../types.js";
-import {
-  EXTRACTION_PROMPT,
-  buildValidationPrompt,
-  buildRepairPrompt,
-} from "../prompts.js";
+import type { LLMProvider, ExtractionResult, ValidationResult } from "../types.js";
+import { EXTRACTION_PROMPT, buildValidationPrompt, buildRepairPrompt } from "../prompts.js";
 
 /**
  * Gemini provider for LLM that extends BaseLLMProvider and implements LLMProvider
@@ -36,11 +28,8 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
    * @param fileName - Name of the file
    * @returns Promise resolving to ExtractionResult
    */
-  async extract(
-    fileBuffer: Buffer,
-    mimeType: string,
-    fileName: string,
-  ): Promise<ExtractionResult> {
+  async extract(fileBuffer: Buffer, mimeType: string, fileName: string): Promise<ExtractionResult> {
+    console.log("[GeminiProvider] Starting extraction for file:", fileName);
     const base64 = fileBuffer.toString("base64");
 
     const response = await this.withTimeout(
@@ -62,7 +51,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
             ],
           },
         ],
-      }),
+      })
     );
 
     const raw = response.text ?? "";
@@ -70,9 +59,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
       throw new Error("LLM returned no text content");
     }
 
-    const parsed = await this.safeParse<ExtractionResult>(raw, (bad) =>
-      this.repairJson(bad),
-    );
+    const parsed = await this.safeParse<ExtractionResult>(raw, (bad) => this.repairJson(bad));
 
     // Retry once if LOW confidence
     if (parsed?.detection?.confidence === "LOW") {
@@ -99,7 +86,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
             parts: [{ text: prompt }],
           },
         ],
-      }),
+      })
     );
 
     const raw = response.text ?? "";
@@ -107,9 +94,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
       throw new Error("LLM returned no text content");
     }
 
-    return this.safeParse<ValidationResult>(raw, (bad) =>
-      this.repairJson(bad),
-    );
+    return this.safeParse<ValidationResult>(raw, (bad) => this.repairJson(bad));
   }
 
   /**
@@ -138,11 +123,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
    * @param name - Name of the file
    * @returns Promise resolving to ExtractionResult
    */
-  private async retryWithHint(
-    buffer: Buffer,
-    mime: string,
-    name: string,
-  ): Promise<ExtractionResult> {
+  private async retryWithHint(buffer: Buffer, mime: string, name: string): Promise<ExtractionResult> {
     const base64 = buffer.toString("base64");
 
     const response = await this.withTimeout(
@@ -164,7 +145,7 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
             ],
           },
         ],
-      }),
+      })
     );
 
     const raw = response.text ?? "";
@@ -172,8 +153,6 @@ export class GeminiProvider extends BaseLLMProvider implements LLMProvider {
       throw new Error("LLM retry returned no text content");
     }
 
-    return this.safeParse<ExtractionResult>(raw, (bad) =>
-      this.repairJson(bad),
-    );
+    return this.safeParse<ExtractionResult>(raw, (bad) => this.repairJson(bad));
   }
 }

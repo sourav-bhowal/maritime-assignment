@@ -1,25 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { BaseLLMProvider } from "./provider.js";
-import type {
-  LLMProvider,
-  ExtractionResult,
-  ValidationResult,
-} from "../types.js";
-import {
-  EXTRACTION_PROMPT,
-  buildValidationPrompt,
-  buildRepairPrompt,
-} from "../prompts.js";
+import type { LLMProvider, ExtractionResult, ValidationResult } from "../types.js";
+import { EXTRACTION_PROMPT, buildValidationPrompt, buildRepairPrompt } from "../prompts.js";
 
 /**
  * Media types supported by Anthropic
  */
 
-type AnthropicMediaType =
-  | "image/jpeg"
-  | "image/png"
-  | "image/gif"
-  | "image/webp";
+type AnthropicMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 /**
  * Claude provider for LLM that extends BaseLLMProvider and implements LLMProvider
@@ -27,7 +15,7 @@ type AnthropicMediaType =
 export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
-  
+
   /**
    * Constructor for ClaudeProvider
    */
@@ -46,11 +34,8 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
    * @param fileName - Name of the file
    * @returns Promise resolving to ExtractionResult
    */
-  async extract(
-    fileBuffer: Buffer,
-    mimeType: string,
-    fileName: string,
-  ): Promise<ExtractionResult> {
+  async extract(fileBuffer: Buffer, mimeType: string, fileName: string): Promise<ExtractionResult> {
+    console.log("[ClaudeProvider] Starting extraction for file:", fileName);
     const base64 = fileBuffer.toString("base64");
 
     const response = await this.withTimeout(
@@ -76,7 +61,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
             ],
           },
         ],
-      }),
+      })
     );
 
     const textBlock = response.content.find((block) => block.type === "text");
@@ -85,9 +70,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
     }
     const raw = textBlock.text;
 
-    const parsed = await this.safeParse<ExtractionResult>(raw, (bad) =>
-      this.repairJson(bad),
-    );
+    const parsed = await this.safeParse<ExtractionResult>(raw, (bad) => this.repairJson(bad));
 
     // Retry once if LOW confidence — include file hints
     if (parsed?.detection?.confidence === "LOW") {
@@ -115,7 +98,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
             content: [{ type: "text", text: prompt }],
           },
         ],
-      }),
+      })
     );
 
     const textBlock = response.content.find((block) => block.type === "text");
@@ -123,9 +106,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
       throw new Error("LLM returned no text content");
     }
 
-    return this.safeParse<ValidationResult>(textBlock.text, (bad) =>
-      this.repairJson(bad),
-    );
+    return this.safeParse<ValidationResult>(textBlock.text, (bad) => this.repairJson(bad));
   }
 
   /**
@@ -159,11 +140,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
    * @param name - Name of the file
    * @returns Promise resolving to ExtractionResult
    */
-  private async retryWithHint(
-    buffer: Buffer,
-    mime: string,
-    name: string,
-  ): Promise<ExtractionResult> {
+  private async retryWithHint(buffer: Buffer, mime: string, name: string): Promise<ExtractionResult> {
     const base64 = buffer.toString("base64");
 
     const response = await this.withTimeout(
@@ -189,7 +166,7 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
             ],
           },
         ],
-      }),
+      })
     );
 
     const textBlock = response.content.find((block) => block.type === "text");
@@ -197,8 +174,6 @@ export class ClaudeProvider extends BaseLLMProvider implements LLMProvider {
       throw new Error("LLM retry returned no text content");
     }
 
-    return this.safeParse<ExtractionResult>(textBlock.text, (bad) =>
-      this.repairJson(bad),
-    );
+    return this.safeParse<ExtractionResult>(textBlock.text, (bad) => this.repairJson(bad));
   }
 }
