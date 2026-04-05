@@ -39,4 +39,4 @@ bun run start:worker
 
 Complete route-level documentation (request formats, response shapes, and error codes) is available at:
 
-- [apps/server/API_DOCS.md](apps/server/API_DOCS.md)
+- [/API_DOCS.md](./API_DOCS.md)
