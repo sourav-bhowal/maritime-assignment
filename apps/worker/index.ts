@@ -110,7 +110,7 @@ async function processExtractionJob(job: Job<ExtractionJobData, ExtractionJobRes
     });
 
     // Mark job as COMPLETED
-    await prisma.job.updateMany({
+    await prisma.job.update({
       where: { extractionId },
       data: { status: "COMPLETED", completedAt: new Date() },
     });
