@@ -34,9 +34,10 @@ model Extraction {
   sessionId String
   session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  fileName String
-  fileHash String
-  mimeType String
+  fileName      String
+  fileHash      String
+  mimeType      String
+  promptVersion String @default("extract-v1")
 
   documentType    DocumentType?
   documentName    String?

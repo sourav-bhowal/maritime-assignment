@@ -14,13 +14,15 @@ Maritime PDFs and scans often need **5–15 seconds** of vision LLM work. Long H
 
 ## Question 2 — Queue Choice
 
-**Choice:** Worker polls PostgreSQL **`jobs`** using **`SELECT … FOR UPDATE SKIP LOCKED`** (configurable interval, default ~1s).
+**Choice:** **BullMQ (Redis-backed queue)** with a dedicated worker process.
 
-**Why:** No Redis or message broker for this assignment footprint; state is **durable** across restarts (unlike a pure in-memory queue); **`GET /api/jobs/:jobId`** is a normal read — no second state store.
+**Why:** It gives durable job delivery, explicit retry/backoff behavior, and clean async state transitions (`QUEUED -> IN_PROGRESS -> COMPLETED/FAILED`) while keeping API latency low. It also cleanly separates request handling from LLM execution, which is important because extraction calls can take multiple seconds.
 
-**If load reached ~500 extractions/minute:** **BullMQ on Redis** for named queues, concurrency caps, retries with backoff, **per-queue rate limits** aligned to LLM provider quotas, and **Bull Board** for ops. The **job state machine** and **`LLMProvider`** boundary stay; only the transport changes.
+**Current behavior:** The API enqueues extraction jobs; the worker consumes them with configured concurrency; job state and error metadata are persisted in the database for polling (`GET /api/jobs/:jobId`). BullMQ is used as the execution transport, while PostgreSQL is the source of truth for business/job records returned by the API.
 
-**Failure modes today:** **Polling delay** (up to one interval before pickup); **no built-in backpressure** when the model is slow; **multi-instance** workers need `SKIP LOCKED` (or a distributed queue) to avoid duplicate work.
+**If load reached ~500 extractions/minute:** I would **migrate from single-node Redis to a managed Redis Cluster** (keeping BullMQ), then scale workers horizontally, split queues by priority/document class, add dead-letter queues, and instrument queue lag plus worker saturation with autoscaling on waiting-job depth.
+
+**Failure modes today:** Redis outage blocks enqueue/consume; queue backlog can grow during provider slowdowns; duplicate processing is possible around crash/retry boundaries if handlers are not fully idempotent; retry storms can happen without guardrails when provider errors are systemic.
 
 ---
 
@@ -60,6 +62,22 @@ Maritime PDFs and scans often need **5–15 seconds** of vision LLM work. Long H
 2. **Object storage for uploads** — files are processed **in memory**, not S3/GCS; prod would store bytes off-box and keep **hash + metadata** in DB.
 3. **Structured logging and metrics** — **`console.log`** today; prod would use **JSON logs**, **traces**, and **LLM latency / parse-failure** metrics.
 4. **Async webhooks** — only **polling** for job completion; optional **`webhookUrl` + HMAC** would be next.
-5. **Prompt versioning** — extraction prompt is fixed in code; prod would **version** and persist **`promptVersion`** per row for regression analysis.
+5. **Automated provider benchmarking** — no recurring benchmark harness yet (accuracy/latency/cost across providers over a fixed fixture set). Deferred to keep scope focused on core API reliability and data correctness.
+
+---
+
+## Bonus — Prompt Versioning
+
+Implemented: each extraction now stores **`promptVersion`** (e.g., `extract-v1`) in the `extractions` table and returns it in extraction responses.
+
+Why this matters: prompt changes are effectively model-behavior releases. Persisting `promptVersion` enables regression analysis, incident triage (“which prompt produced this malformed output?”), and apples-to-apples quality comparisons across deployments.
+
+## Bonus — Expiring Documents Endpoint
+
+Implemented: `GET /api/sessions/:sessionId/expiring?withinDays=90`.
+
+Design choice: this endpoint is backed by a **database query** (not in-memory filtering), using `status = COMPLETE` and expiry predicates (`isExpired = true` OR `validity.daysUntilExpiry <= withinDays`). Results are sorted by urgency (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) and then nearest expiry.
+
+Why this matters: this keeps response time predictable as sessions grow and aligns with the assignment’s requirement that expiry alerting must be query-driven.
 
 ---

@@ -2,6 +2,8 @@
  * Extraction prompt — exact text from the assignment specification.
  * Do NOT modify this prompt.
  */
+export const EXTRACTION_PROMPT_VERSION = "extract-v1";
+
 export const EXTRACTION_PROMPT = `You are an expert maritime document analyst with deep knowledge of STCW, MARINA, IMO, and international seafarer certification standards.
 
 A document has been provided. Perform the following in a single pass:

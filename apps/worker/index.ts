@@ -1,5 +1,5 @@
 import { prisma } from "@repo/database";
-import { createLLM } from "@repo/llm";
+import { createLLM, EXTRACTION_PROMPT_VERSION } from "@repo/llm";
 import type { ExtractionResult } from "@repo/llm";
 import { createExtractionWorker, type ExtractionJobData, type ExtractionJobResult } from "@repo/queue";
 import type { Job } from "bullmq";
@@ -47,6 +47,7 @@ async function processExtractionJob(job: Job<ExtractionJobData, ExtractionJobRes
         documentName: result.detection.documentName,
         category: result.detection.category,
         applicableRole: mapNAEnum(result.detection.applicableRole),
+        promptVersion: EXTRACTION_PROMPT_VERSION,
         isRequired: result.detection.isRequired,
         detectionReason: result.detection.detectionReason,
         confidence: result.detection.confidence,

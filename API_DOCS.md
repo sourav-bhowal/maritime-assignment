@@ -94,6 +94,7 @@ Accepts one document and performs extraction in `sync` (default) or `async` mode
   "id": "uuid",
   "sessionId": "uuid",
   "fileName": "passport.pdf",
+  "promptVersion": "extract-v1",
   "documentType": "PASSPORT",
   "documentName": "Passport",
   "applicableRole": "N/A",
@@ -218,6 +219,7 @@ Poll status/result of async extraction.
     "id": "uuid",
     "sessionId": "uuid",
     "fileName": "passport.pdf",
+    "promptVersion": "extract-v1",
     "documentType": "PASSPORT",
     "documentName": "Passport",
     "applicableRole": "N/A",
@@ -344,7 +346,50 @@ Runs LLM-based consistency/compliance validation across completed extractions in
 
 ---
 
-## 6) Session Compliance Report
+## 6) Expiring Documents (Bonus)
+
+### `GET /sessions/:sessionId/expiring?withinDays=90`
+
+Returns documents in a session that are expired or expiring within the given window.
+
+#### Request
+- Path params:
+  - `sessionId` (required UUID)
+- Query params:
+  - `withinDays` (optional integer, default `90`, min `1`, max `3650`)
+
+#### Success Response
+- `200 OK`
+
+```json
+{
+  "sessionId": "uuid",
+  "withinDays": 90,
+  "count": 2,
+  "documents": [
+    {
+      "extractionId": "uuid",
+      "documentType": "COC",
+      "documentName": "Certificate of Competency",
+      "fileName": "coc.jpg",
+      "expiryDate": "10/04/2026",
+      "daysUntilExpiry": 5,
+      "isExpired": false,
+      "urgency": "HIGH"
+    }
+  ]
+}
+```
+
+Sorted by urgency (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) then nearest expiry.
+
+#### Errors
+- `404 SESSION_NOT_FOUND`
+- `500 INTERNAL_ERROR` for unexpected failures.
+
+---
+
+## 7) Session Compliance Report
 
 ### `GET /sessions/:sessionId/report`
 

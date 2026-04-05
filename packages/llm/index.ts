@@ -1,7 +1,10 @@
 import { ClaudeProvider } from "./src/providers/claude.js";
 import { GeminiProvider } from "./src/providers/gemini.js";
 import { OpenAIProvider } from "./src/providers/openai.js";
+import { EXTRACTION_PROMPT_VERSION } from "./src/prompts.js";
 import type { LLMProvider } from "./src/types.js";
+
+export { EXTRACTION_PROMPT_VERSION };
 
 export type { LLMProvider } from "./src/types.js";
 export type {

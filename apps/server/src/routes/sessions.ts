@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getExpiringDocuments,
   getSessionById,
   getSessionReport,
   validateSession,
@@ -18,6 +19,12 @@ sessionsRouter.get("/sessions/:sessionId", getSessionById);
  * Cross-document compliance validation via LLM.
  */
 sessionsRouter.post("/sessions/:sessionId/validate", validateSession);
+
+/**
+ * GET /api/sessions/:sessionId/expiring?withinDays=90
+ * Returns documents in the session that are expired or expiring within the given window.
+ */
+sessionsRouter.get("/sessions/:sessionId/expiring", getExpiringDocuments);
 
 /**
  * GET /api/sessions/:sessionId/report

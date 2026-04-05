@@ -1,6 +1,6 @@
 import { prisma } from "@repo/database";
 import { validateFile, extractQuerySchema, extractBodySchema, formatExtractionResponse, mapNAEnum, parseDate } from "@repo/validation";
-import { createLLM, type ExtractionResult } from "@repo/llm";
+import { createLLM, EXTRACTION_PROMPT_VERSION, type ExtractionResult } from "@repo/llm";
 import { enqueueExtraction, getEstimatedWaitMs } from "@repo/queue";
 import { createAppError } from "../middleware/error-handler.js";
 import { Request, Response } from "express";
@@ -89,6 +89,7 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
         fileName: file.originalname,
         fileHash,
         mimeType: file.mimetype,
+        promptVersion: EXTRACTION_PROMPT_VERSION,
         status: "FAILED", // will be updated on completion
       },
     });
@@ -169,6 +170,7 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
       fileName: file.originalname,
       fileHash,
       mimeType: file.mimetype,
+      promptVersion: EXTRACTION_PROMPT_VERSION,
       documentType: result.detection.documentType,
       documentName: result.detection.documentName,
       category: result.detection.category,

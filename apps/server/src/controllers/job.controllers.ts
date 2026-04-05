@@ -91,6 +91,7 @@ export const getJobById = AsyncHandler(async (req: Request, res: Response, next:
           id: extraction.id,
           sessionId: extraction.sessionId,
           fileName: extraction.fileName,
+          promptVersion: extraction.promptVersion,
           documentType: extraction.documentType,
           documentName: extraction.documentName,
           applicableRole: extraction.applicableRole,

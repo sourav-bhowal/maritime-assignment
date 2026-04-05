@@ -1,6 +1,6 @@
 import { prisma } from "@repo/database";
 import { createAppError } from "../middleware/error-handler.js";
-import { sessionParamsSchema, deriveOverallHealth, detectRole, formatDate } from "@repo/validation";
+import { sessionParamsSchema, sessionExpiringQuerySchema, deriveOverallHealth, detectRole, formatDate } from "@repo/validation";
 import type { Request, Response, NextFunction } from "express";
 import { createLLM, type ExtractionResult } from "@repo/llm";
 import ApiResponse from "../lib/apiResponse.js";
@@ -196,6 +196,103 @@ export const validateSession = AsyncHandler(async (req: Request, res: Response, 
         summary: validationResult.summary,
         recommendations: validationResult.recommendations,
         validatedAt: validation.createdAt,
+      },
+    })
+  );
+});
+
+/**
+ * @description Get expiring or expired documents in a session
+ * @param req Request object
+ * @param res Response object
+ * @param next Next function
+ */
+
+export const getExpiringDocuments = AsyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const { sessionId } = sessionParamsSchema.parse(req.params);
+  const { withinDays } = sessionExpiringQuerySchema.parse(req.query);
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { id: true },
+  });
+
+  if (!session) {
+    throw createAppError(`Session ${sessionId} does not exist`, 404, "SESSION_NOT_FOUND");
+  }
+
+  const extractions = await prisma.extraction.findMany({
+    where: {
+      sessionId,
+      status: "COMPLETE",
+      OR: [
+        { isExpired: true },
+        {
+          validity: {
+            is: {
+              daysUntilExpiry: {
+                lte: withinDays,
+              },
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      validity: true,
+    },
+  });
+
+  // Rank by urgency: Expired first, then by days until expiry
+  const urgencyRank: Record<"CRITICAL" | "HIGH" | "MEDIUM" | "LOW", number> = {
+    CRITICAL: 0,
+    HIGH: 1,
+    MEDIUM: 2,
+    LOW: 3,
+  };
+
+  // Map extractions to expiring document format
+  const documents = extractions
+    .map((extraction) => {
+      const daysUntilExpiry = extraction.validity?.daysUntilExpiry ?? null;
+
+      // Determine urgency level based on expiry status and days until expiry
+      let urgency: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" = "LOW";
+      if (extraction.isExpired) {
+        urgency = "CRITICAL";
+      } else if (daysUntilExpiry !== null && daysUntilExpiry <= 30) {
+        urgency = "HIGH";
+      } else if (daysUntilExpiry !== null && daysUntilExpiry <= withinDays) {
+        urgency = "MEDIUM";
+      }
+
+      return {
+        extractionId: extraction.id,
+        documentType: extraction.documentType,
+        documentName: extraction.documentName || extraction.fileName,
+        fileName: extraction.fileName,
+        expiryDate: extraction.validity?.dateOfExpiry ? formatDate(extraction.validity.dateOfExpiry) : null,
+        daysUntilExpiry,
+        isExpired: extraction.isExpired,
+        urgency,
+      };
+    })
+    .sort((a, b) => {
+      // Sort by urgency first, then by days until expiry
+      const urgencyDiff = urgencyRank[a.urgency] - urgencyRank[b.urgency];
+      if (urgencyDiff !== 0) return urgencyDiff;
+      return (a.daysUntilExpiry ?? 99999) - (b.daysUntilExpiry ?? 99999);
+    });
+
+  res.status(200).json(
+    new ApiResponse({
+      message: "Expiring documents retrieved successfully.",
+      statusCode: 200,
+      data: {
+        sessionId,
+        withinDays,
+        count: documents.length,
+        documents,
       },
     })
   );

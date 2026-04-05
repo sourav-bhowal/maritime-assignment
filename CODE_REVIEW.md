@@ -10,7 +10,7 @@ None of this is about style — these are things that would either break in prod
 
 ## 🔴 Critical — Must Fix Before Merge
 
-### Line 13: Hardcoded API key
+### In `const client = new Anthropic(...)`: Hardcoded API key
 
 ```ts
 const client = new Anthropic({ apiKey: 'sk-ant-REDACTED' });
@@ -30,7 +30,7 @@ Add the key to `.env` (which should be in `.gitignore`) and document it in `.env
 
 ---
 
-### Lines 559–560: Global state for storage
+### In `global.extractions` block: Global state for storage
 
 ```ts
 global.extractions = global.extractions || [];
@@ -48,7 +48,7 @@ Using `global` as a database means:
 
 ---
 
-### Line 549: Overly broad prompt
+### In `text: 'Extract all information ...'`: Overly broad prompt
 
 ```ts
 text: 'Extract all information from this maritime document and return as JSON.',
@@ -67,7 +67,7 @@ This prompt will produce wildly inconsistent results across different documents 
 
 ## 🟡 Important — Should Fix
 
-### Line 533: No model configuration
+### In `model: 'claude-opus-4-6'`: No model configuration
 
 ```ts
 model: 'claude-opus-4-6',
@@ -75,14 +75,14 @@ model: 'claude-opus-4-6',
 
 Two issues here:
 
-1. **Opus is the most expensive model** (~15x the cost of Haiku). For document extraction, Haiku or Sonnet produce equivalent results at a fraction of the cost. At scale, this could cost us $50+ per batch of documents instead of $3.
+1. **Opus is significantly more expensive** than lighter options (e.g., Haiku) for this extraction use case, so defaulting to it increases run cost materially at scale.
 2. **The model is hardcoded.** If we need to switch providers or models (e.g., for cost, speed, or rate limits), we'd have to change code and redeploy.
 
 **Fix:** Read from `process.env.LLM_MODEL` with a sensible default like `claude-haiku-4-5-20251001`.
 
 ---
 
-### Line 556: No error handling for JSON parsing
+### In `JSON.parse(response.content[0].text)`: No error handling for JSON parsing
 
 ```ts
 const result = JSON.parse(response.content[0].text);
@@ -94,7 +94,7 @@ LLMs frequently return invalid JSON — they add markdown code fences, include e
 
 ---
 
-### Line 529: Saving files to disk with original filename
+### In `path.join('./uploads', file.originalname)`: Saving files to disk with original filename
 
 ```ts
 const savedPath = path.join('./uploads', file.originalname);
@@ -110,7 +110,7 @@ Several problems:
 
 ---
 
-### Lines 515–566: No timeout on LLM call
+### In `await client.messages.create(...)`: No timeout on LLM call
 
 ```ts
 const response = await client.messages.create({ ... });

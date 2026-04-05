@@ -62,10 +62,17 @@ export const sessionParamsSchema = z.object({
   sessionId: z.uuid(),
 });
 
+// ─── GET /api/sessions/:sessionId/expiring — Query ─────────────────
+
+export const sessionExpiringQuerySchema = z.object({
+  withinDays: z.coerce.number().int().min(1).max(3650).default(90),
+});
+
 // ─── Type Exports ────────────────────────────────────────────────────
 
 export type ExtractQuery = z.infer<typeof extractQuerySchema>;
 export type ExtractBody = z.infer<typeof extractBodySchema>;
 export type JobParams = z.infer<typeof jobParamsSchema>;
 export type SessionParams = z.infer<typeof sessionParamsSchema>;
+export type SessionExpiringQuery = z.infer<typeof sessionExpiringQuerySchema>;
 export * from "./utils.js";
