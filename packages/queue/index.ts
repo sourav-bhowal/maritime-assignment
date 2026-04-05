@@ -64,30 +64,23 @@ const EXTRACTION_QUEUE = "extraction";
 
 // ─── Queue ───────────────────────────────────────────────────────────
 
-let extractionQueue: Queue<ExtractionJobData, ExtractionJobResult> | null =
-  null;
+let extractionQueue: Queue<ExtractionJobData, ExtractionJobResult> | null = null;
 let extractionQueueEvents: QueueEvents | null = null;
 
 /**
  * Get or create the extraction queue singleton.
  */
-export function getExtractionQueue(): Queue<
-  ExtractionJobData,
-  ExtractionJobResult
-> {
+export function getExtractionQueue(): Queue<ExtractionJobData, ExtractionJobResult> {
   if (!extractionQueue) {
-    extractionQueue = new Queue<ExtractionJobData, ExtractionJobResult>(
-      EXTRACTION_QUEUE,
-      {
-        connection: getRedisConnection(),
-        defaultJobOptions: {
-          attempts: 2,
-          backoff: { type: "exponential", delay: 3000 },
-          removeOnComplete: { age: 86400, count: 1000 }, // keep 24h or 1k jobs
-          removeOnFail: { age: 604800, count: 5000 }, // keep 7d or 5k failed
-        },
+    extractionQueue = new Queue<ExtractionJobData, ExtractionJobResult>(EXTRACTION_QUEUE, {
+      connection: getRedisConnection(),
+      defaultJobOptions: {
+        attempts: 2,
+        backoff: { type: "exponential", delay: 3000 },
+        removeOnComplete: { age: 86400, count: 1000 }, // keep 24h or 1k jobs
+        removeOnFail: { age: 604800, count: 5000 }, // keep 7d or 5k failed
       },
-    );
+    });
   }
   return extractionQueue;
 }
@@ -111,9 +104,7 @@ export function getExtractionQueueEvents(): QueueEvents {
  * @param data - The extraction job data.
  * @returns The BullMQ job instance.
  */
-export async function enqueueExtraction(
-  data: ExtractionJobData,
-): Promise<Job<ExtractionJobData, ExtractionJobResult>> {
+export async function enqueueExtraction(data: ExtractionJobData): Promise<Job<ExtractionJobData, ExtractionJobResult>> {
   const queue = getExtractionQueue();
   const job = await queue.add("extract", data, {
     jobId: data.extractionId, // use extractionId as the BullMQ job ID for easy lookup
@@ -132,34 +123,24 @@ export async function enqueueExtraction(
  * @returns The BullMQ Worker instance.
  */
 export function createExtractionWorker(
-  processor: (
-    job: Job<ExtractionJobData, ExtractionJobResult>,
-  ) => Promise<ExtractionJobResult>,
-  concurrency: number = 3,
+  processor: (job: Job<ExtractionJobData, ExtractionJobResult>) => Promise<ExtractionJobResult>,
+  concurrency: number = 3
 ): Worker<ExtractionJobData, ExtractionJobResult> {
-  const worker = new Worker<ExtractionJobData, ExtractionJobResult>(
-    EXTRACTION_QUEUE,
-    processor,
-    {
-      connection: getRedisConnection(),
-      concurrency,
-      limiter: {
-        max: 10, // max 10 jobs
-        duration: 60_000, // per 60 seconds — matches LLM rate limiting
-      },
+  const worker = new Worker<ExtractionJobData, ExtractionJobResult>(EXTRACTION_QUEUE, processor, {
+    connection: getRedisConnection(),
+    concurrency,
+    limiter: {
+      max: 10, // max 10 jobs
+      duration: 60_000, // per 60 seconds — matches LLM rate limiting
     },
-  );
+  });
 
   worker.on("completed", (job) => {
-    console.log(
-      `[Queue] Job ${job.id} completed for extraction ${job.data.extractionId}`,
-    );
+    console.log(`[Queue] Job ${job.id} completed for extraction ${job.data.extractionId}`);
   });
 
   worker.on("failed", (job, err) => {
-    console.error(
-      `[Queue] Job ${job?.id} failed for extraction ${job?.data.extractionId}: ${err.message}`,
-    );
+    console.error(`[Queue] Job ${job?.id} failed for extraction ${job?.data.extractionId}: ${err.message}`);
   });
 
   worker.on("error", (err) => {

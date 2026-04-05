@@ -85,6 +85,7 @@
         "openai": "^6.33.0",
       },
       "devDependencies": {
+        "@repo/database": "*",
         "@repo/typescript-config": "*",
         "@types/bun": "latest",
       },

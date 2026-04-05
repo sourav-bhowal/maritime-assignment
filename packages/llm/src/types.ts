@@ -1,65 +1,24 @@
+import {
+  ApplicableRole,
+  Confidence,
+  DocumentCategory,
+  DocumentType,
+  FitnessResult,
+  DrugTestResult,
+} from "@repo/database";
+
 /** * Detection metadata from LLM document analysis.
  */
 export interface Detection {
-  documentType: DocumentTypeEnum;
+  documentType: DocumentType;
   documentName: string;
-  category: DocumentCategoryEnum;
-  applicableRole: ApplicableRoleEnum;
+  category: DocumentCategory;
+  applicableRole: ApplicableRole;
   isRequired: boolean;
-  confidence: ConfidenceEnum;
+  confidence: Confidence;
   detectionReason: string;
 }
 
-export enum ConfidenceEnum {
-  HIGH = "HIGH",
-  MEDIUM = "MEDIUM",
-  LOW = "LOW",
-}
-
-export enum DocumentCategoryEnum {
-  IDENTITY = "IDENTITY",
-  CERTIFICATION = "CERTIFICATION",
-  STCW_ENDORSEMENT = "STCW_ENDORSEMENT",
-  MEDICAL = "MEDICAL",
-  TRAINING = "TRAINING",
-  FLAG_STATE = "FLAG_STATE",
-  OTHER = "OTHER",
-}
-
-export enum ApplicableRoleEnum {
-  DECK = "DECK",
-  ENGINE = "ENGINE",
-  BOTH = "BOTH",
-  NA = "N/A",
-}
-
-export enum DocumentTypeEnum {
-  COC = "COC",
-  COP_BT = "COP_BT",
-  COP_PSCRB = "COP_PSCRB",
-  COP_AFF = "COP_AFF",
-  COP_MEFA = "COP_MEFA",
-  COP_MECA = "COP_MECA",
-  COP_SSO = "COP_SSO",
-  COP_SDSD = "COP_SDSD",
-  ECDIS_GENERIC = "ECDIS_GENERIC",
-  ECDIS_TYPE = "ECDIS_TYPE",
-  SIRB = "SIRB",
-  PASSPORT = "PASSPORT",
-  PEME = "PEME",
-  DRUG_TEST = "DRUG_TEST",
-  YELLOW_FEVER = "YELLOW_FEVER",
-  ERM = "ERM",
-  MARPOL = "MARPOL",
-  SULPHUR_CAP = "SULPHUR_CAP",
-  BALLAST_WATER = "BALLAST_WATER",
-  HATCH_COVER = "HATCH_COVER",
-  BRM_SSBT = "BRM_SSBT",
-  TRAIN_TRAINER = "TRAIN_TRAINER",
-  HAZMAT = "HAZMAT",
-  FLAG_STATE = "FLAG_STATE",
-  OTHER = "OTHER",
-}
 /**
  * Holder information extracted from the document.
  */
@@ -117,17 +76,9 @@ export interface MedicalData {
   expiryDate: string | null;
 }
 
-export enum FitnessResultEnum {
-  FIT = "FIT",
-  UNFIT = "UNFIT",
-  NA = "N/A",
-}
+export type FitnessResultEnum = FitnessResult;
 
-export enum DrugTestResultEnum {
-  NEGATIVE = "NEGATIVE",
-  POSITIVE = "POSITIVE",
-  NA = "N/A",
-}
+export type DrugTestResultEnum = DrugTestResult;
 
 /**
  * A flag raised during extraction.
@@ -227,11 +178,7 @@ export interface ValidationResult {
  * LLM provider interface for document extraction and validation.
  */
 export interface LLMProvider {
-  extract(
-    fileBuffer: Buffer,
-    mimeType: string,
-    fileName: string,
-  ): Promise<ExtractionResult>;
+  extract(fileBuffer: Buffer, mimeType: string, fileName: string): Promise<ExtractionResult>;
 
   validate(extractions: ExtractionResult[]): Promise<ValidationResult>;
 }

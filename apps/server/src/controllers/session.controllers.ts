@@ -2,7 +2,7 @@ import { prisma } from "@repo/database";
 import { createAppError } from "../middleware/error-handler.js";
 import { sessionParamsSchema, deriveOverallHealth, detectRole, formatDate } from "@repo/validation";
 import type { Request, Response, NextFunction } from "express";
-import { createLLM } from "@repo/llm";
+import { createLLM, type ExtractionResult } from "@repo/llm";
 import ApiResponse from "../lib/apiResponse.js";
 import AsyncHandler from "../lib/asyncHandler.js";
 
@@ -109,58 +109,62 @@ export const validateSession = AsyncHandler(async (req: Request, res: Response, 
   }
 
   // Build extraction data for LLM
-  const extractionData = session.extractions.map((e) => ({
-    detection: {
-      documentType: e.documentType || "OTHER",
-      documentName: e.documentName || e.fileName,
-      category: e.category || "OTHER",
-      applicableRole: e.applicableRole === "NA" ? "N/A" : e.applicableRole || "N/A",
-      isRequired: e.isRequired,
-      confidence: e.confidence,
-      detectionReason: e.detectionReason || null,
-    },
-    holder: {
-      fullName: e.holderName,
-      dateOfBirth: e.dateOfBirth ? formatDate(e.dateOfBirth) : null,
-      nationality: e.nationality,
-      passportNumber: e.passportNumber,
-      sirbNumber: e.sirbNumber,
-    },
-    fields: e.fields.map((f) => ({
-      key: f.key,
-      label: f.label,
-      value: f.value,
-      importance: f.importance,
-      status: f.status,
-    })),
-    validity: {
-      dateOfIssue: e.validity?.dateOfIssue ? formatDate(e.validity.dateOfIssue) : null,
-      dateOfExpiry: e.validity?.dateOfExpiry ? formatDate(e.validity.dateOfExpiry) : null,
-      isExpired: e.validity?.isExpired ?? e.isExpired,
-      daysUntilExpiry: e.validity?.daysUntilExpiry ?? null,
-    },
-    compliance: {
-      // not normalized, just pass through for now
-      issuingAuthority: e.compliance?.issuingAuthority || null,
-      regulationReference: e.compliance?.regulationReference || null,
-      imoModelCourse: e.compliance?.imoModelCourse || null,
-      recognizedAuthority: e.compliance?.recognizedAuthority ?? false,
-      limitations: e.compliance?.limitations || null,
-    },
-    medicalData: {
-      fitnessResult: e.medical?.fitnessResult === "NA" ? "N/A" : e.medical?.fitnessResult || "N/A",
-      drugTestResult: e.medical?.drugTestResult === "NA" ? "N/A" : e.medical?.drugTestResult || "N/A",
-      restrictions: e.medical?.restrictions || null,
-      specialNotes: e.medical?.specialNotes || null,
-      expiryDate: e.medical?.expiryDate ? formatDate(e.medical.expiryDate) : null,
-    },
-    flags: e.flags.map((f) => ({
-      severity: f.severity,
-      message: f.message,
-    })),
-    summary: e.summary || "",
-    rawResponse: e.rawLlmResponse || "",
-  }));
+  const extractionData: ExtractionResult[] = session.extractions.map(
+    (e): ExtractionResult => ({
+      detection: {
+        documentType: e.documentType || "OTHER",
+        documentName: e.documentName || e.fileName,
+        category: e.category || "OTHER",
+        applicableRole: e.applicableRole || "NA",
+        isRequired: e.isRequired ?? false,
+        confidence: e.confidence || "LOW",
+        detectionReason: e.detectionReason || "",
+      },
+      holder: {
+        fullName: e.holderName,
+        dateOfBirth: e.dateOfBirth ? formatDate(e.dateOfBirth) : null,
+        nationality: e.nationality,
+        passportNumber: e.passportNumber,
+        sirbNumber: e.sirbNumber,
+        rank: null,
+        photo: "ABSENT",
+      },
+      fields: e.fields.map((f) => ({
+        key: f.key,
+        label: f.label,
+        value: f.value,
+        importance: f.importance,
+        status: f.status,
+      })),
+      validity: {
+        dateOfIssue: e.validity?.dateOfIssue ? formatDate(e.validity.dateOfIssue) : null,
+        dateOfExpiry: e.validity?.dateOfExpiry ? formatDate(e.validity.dateOfExpiry) : null,
+        isExpired: e.validity?.isExpired ?? e.isExpired,
+        daysUntilExpiry: e.validity?.daysUntilExpiry ?? null,
+        revalidationRequired: e.validity?.revalidationRequired ?? null,
+      },
+      compliance: {
+        issuingAuthority: e.compliance?.issuingAuthority || "N/A",
+        regulationReference: e.compliance?.regulationReference || null,
+        imoModelCourse: e.compliance?.imoModelCourse || null,
+        recognizedAuthority: e.compliance?.recognizedAuthority ?? false,
+        limitations: e.compliance?.limitations || null,
+      },
+      medicalData: {
+        fitnessResult: e.medical?.fitnessResult || "NA",
+        drugTestResult: e.medical?.drugTestResult || "NA",
+        restrictions: e.medical?.restrictions || null,
+        specialNotes: e.medical?.specialNotes || null,
+        expiryDate: e.medical?.expiryDate ? formatDate(e.medical.expiryDate) : null,
+      },
+      flags: e.flags.map((f) => ({
+        severity: f.severity,
+        message: f.message,
+      })),
+      summary: e.summary || "",
+      rawResponse: e.rawLlmResponse || "",
+    })
+  );
 
   // Call LLM for cross-document validation
   const validationResult = await llm.validate(extractionData);
