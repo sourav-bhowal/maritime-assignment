@@ -11,11 +11,7 @@ class ApiResponse<T> {
   message: string;
   success: boolean;
 
-  constructor({
-    statusCode,
-    data,
-    message = "Successful",
-  }: ApiResponseParams<T>) {
+  constructor({ statusCode, data, message = "Successful" }: ApiResponseParams<T>) {
     this.statusCode = statusCode;
     this.data = data;
     this.message = message;
