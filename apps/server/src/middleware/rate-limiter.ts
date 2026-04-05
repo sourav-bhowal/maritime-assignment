@@ -31,7 +31,7 @@ setInterval(() => {
 /**
  * Rate limiter middleware — 10 requests per minute per IP.
  */
-export function rateLimiter(req: Request, _res: Response, next: NextFunction): void {
+export function rateLimiter(req: Request, res: Response, next: NextFunction): void {
   const ip = req.ip || req.socket.remoteAddress || "unknown";
   const now = Date.now();
 
@@ -49,19 +49,12 @@ export function rateLimiter(req: Request, _res: Response, next: NextFunction): v
   bucket.lastRefill = now;
 
   if (bucket.tokens < 1) {
-    const retryAfterMs = Math.ceil(
-      ((1 - bucket.tokens) / MAX_REQUESTS) * WINDOW_MS,
-    );
+    const retryAfterMs = Math.ceil(((1 - bucket.tokens) / MAX_REQUESTS) * WINDOW_MS);
 
-    const err = createAppError(
-      "Rate limit exceeded. Please try again later.",
-      429,
-      "RATE_LIMITED",
-      { retryAfterMs },
-    );
+    const err = createAppError("Rate limit exceeded. Please try again later.", 429, "RATE_LIMITED", { retryAfterMs });
 
     // Set Retry-After header (in seconds)
-    _res.set("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+    res.set("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
 
     next(err);
     return;

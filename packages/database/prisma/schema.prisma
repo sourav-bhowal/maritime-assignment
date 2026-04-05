@@ -38,10 +38,12 @@ model Extraction {
   fileHash String
   mimeType String
 
-  documentType   DocumentType?
-  documentName   String?
-  category       DocumentCategory?
-  applicableRole ApplicableRole?
+  documentType    DocumentType?
+  documentName    String?
+  category        DocumentCategory?
+  applicableRole  ApplicableRole?
+  isRequired      Boolean?
+  detectionReason String?
 
   confidence Confidence?
 
@@ -63,17 +65,37 @@ model Extraction {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  fields   ExtractionField[]
-  validity ExtractionValidity?
-  medical  ExtractionMedical?
-  flags    ExtractionFlag[]
-  job      Job?
+  fields     ExtractionField[]
+  compliance ExtractionCompliance?
+  validity   ExtractionValidity?
+  medical    ExtractionMedical?
+  flags      ExtractionFlag[]
+  job        Job?
 
   @@unique([sessionId, fileHash]) // deduplication
   @@index([sessionId])
   @@index([documentType])
   @@index([isExpired])
   @@map("extractions")
+}
+
+/**
+ * ExtractionCompliance represents the compliance information extracted from a document, such as issuing authority, regulation references,
+ * IMO model course, recognized authority status, and any limitations. It is associated with a specific extraction and provides insights into
+ * the compliance status of the document based on the extracted information.
+ */
+
+model ExtractionCompliance {
+  extractionId String     @id @default(uuid())
+  extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+
+  issuingAuthority    String?
+  regulationReference String?
+  imoModelCourse      String?
+  recognizedAuthority Boolean?
+  limitations         String?
+
+  @@map("extraction_compliance")
 }
 
 enum ExtractionStatus {
@@ -176,7 +198,7 @@ enum ExtractionFieldStatus {
  */
 
 model ExtractionValidity {
-  extractionId String     @id
+  extractionId String     @id @default(uuid())
   extraction   Extraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
 
   dateOfIssue  DateTime?

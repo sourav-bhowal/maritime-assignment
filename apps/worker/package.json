@@ -16,6 +16,7 @@
   "dependencies": {
     "@repo/database": "*",
     "@repo/llm": "*",
-    "@repo/queue": "*"
+    "@repo/queue": "*",
+    "@repo/validation": "*"
   }
 }

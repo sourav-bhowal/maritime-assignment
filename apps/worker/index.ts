@@ -1,12 +1,9 @@
 import { prisma } from "@repo/database";
 import { createLLM } from "@repo/llm";
 import type { ExtractionResult } from "@repo/llm";
-import {
-  createExtractionWorker,
-  type ExtractionJobData,
-  type ExtractionJobResult,
-} from "@repo/queue";
+import { createExtractionWorker, type ExtractionJobData, type ExtractionJobResult } from "@repo/queue";
 import type { Job } from "bullmq";
+import { mapNAEnum, parseDate } from "@repo/validation";
 
 const llm = createLLM();
 
@@ -20,15 +17,13 @@ console.log(`[Worker] LLM Provider: ${process.env.LLM_PROVIDER || "not set"}`);
  * 3. Store result in database
  * 4. Mark job as COMPLETED or FAILED
  */
-async function processExtractionJob(
-  job: Job<ExtractionJobData, ExtractionJobResult>,
-): Promise<ExtractionJobResult> {
+async function processExtractionJob(job: Job<ExtractionJobData, ExtractionJobResult>): Promise<ExtractionJobResult> {
   const { extractionId, sessionId, fileBuffer, mimeType, fileName } = job.data;
 
   console.log(`[Worker] Processing job ${job.id} — extraction ${extractionId}`);
 
   // Mark job as IN_PROGRESS
-  await prisma.job.updateMany({
+  await prisma.job.update({
     where: { extractionId },
     data: { status: "IN_PROGRESS", startedAt: new Date() },
   });
@@ -40,11 +35,7 @@ async function processExtractionJob(
     const buffer = Buffer.from(fileBuffer, "base64");
 
     // Run LLM extraction
-    const result: ExtractionResult = await llm.extract(
-      buffer,
-      mimeType,
-      fileName,
-    );
+    const result: ExtractionResult = await llm.extract(buffer, mimeType, fileName);
 
     const processingTimeMs = Date.now() - startTime;
 
@@ -56,11 +47,11 @@ async function processExtractionJob(
         documentName: result.detection.documentName,
         category: result.detection.category,
         applicableRole: mapNAEnum(result.detection.applicableRole),
+        isRequired: result.detection.isRequired,
+        detectionReason: result.detection.detectionReason,
         confidence: result.detection.confidence,
         holderName: result.holder.fullName,
-        dateOfBirth: result.holder.dateOfBirth
-          ? parseDate(result.holder.dateOfBirth)
-          : null,
+        dateOfBirth: result.holder.dateOfBirth ? parseDate(result.holder.dateOfBirth) : null,
         nationality: result.holder.nationality,
         passportNumber: result.holder.passportNumber,
         sirbNumber: result.holder.sirbNumber,
@@ -69,6 +60,15 @@ async function processExtractionJob(
         processingTimeMs,
         status: "COMPLETE",
         rawLlmResponse: JSON.stringify(result),
+        compliance: {
+          create: {
+            issuingAuthority: result.compliance.issuingAuthority,
+            regulationReference: result.compliance.regulationReference,
+            imoModelCourse: result.compliance.imoModelCourse,
+            recognizedAuthority: result.compliance.recognizedAuthority,
+            limitations: result.compliance.limitations,
+          },
+        },
         fields: {
           create: result.fields.map((f) => ({
             key: f.key,
@@ -80,13 +80,9 @@ async function processExtractionJob(
         },
         validity: {
           create: {
-            dateOfIssue: result.validity.dateOfIssue
-              ? parseDate(result.validity.dateOfIssue)
-              : null,
+            dateOfIssue: result.validity.dateOfIssue ? parseDate(result.validity.dateOfIssue) : null,
             dateOfExpiry:
-              result.validity.dateOfExpiry &&
-              result.validity.dateOfExpiry !== "No Expiry" &&
-              result.validity.dateOfExpiry !== "Lifetime"
+              result.validity.dateOfExpiry && result.validity.dateOfExpiry !== "No Expiry" && result.validity.dateOfExpiry !== "Lifetime"
                 ? parseDate(result.validity.dateOfExpiry)
                 : null,
             isExpired: result.validity.isExpired,
@@ -100,14 +96,12 @@ async function processExtractionJob(
             drugTestResult: mapNAEnum(result.medicalData.drugTestResult),
             restrictions: result.medicalData.restrictions,
             specialNotes: result.medicalData.specialNotes,
-            expiryDate: result.medicalData.expiryDate
-              ? parseDate(result.medicalData.expiryDate)
-              : null,
+            expiryDate: result.medicalData.expiryDate ? parseDate(result.medicalData.expiryDate) : null,
           },
         },
         flags: {
           create: result.flags.map((f) => ({
-            severity: f.severity as any,
+            severity: f.severity,
             message: f.message,
           })),
         },
@@ -120,9 +114,7 @@ async function processExtractionJob(
       data: { status: "COMPLETED", completedAt: new Date() },
     });
 
-    console.log(
-      `[Worker] Job ${job.id} completed — ${result.detection.documentType} (${result.detection.confidence}) in ${processingTimeMs}ms`,
-    );
+    console.log(`[Worker] Job ${job.id} completed — ${result.detection.documentType} (${result.detection.confidence}) in ${processingTimeMs}ms`);
 
     return {
       extractionId,
@@ -130,14 +122,11 @@ async function processExtractionJob(
       success: true,
     };
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const isTimeout = errorMessage === "LLM_TIMEOUT";
     const errorCode = isTimeout ? "LLM_TIMEOUT" : "LLM_JSON_PARSE_FAIL";
 
-    console.error(
-      `[Worker] Job ${job.id} failed — ${errorCode}: ${errorMessage}`,
-    );
+    console.error(`[Worker] Job ${job.id} failed — ${errorCode}: ${errorMessage}`);
 
     // Store the failure in extraction
     await prisma.extraction.update({
@@ -150,7 +139,7 @@ async function processExtractionJob(
     });
 
     // Mark job as FAILED
-    await prisma.job.updateMany({
+    await prisma.job.update({
       where: { extractionId },
       data: {
         status: "FAILED",
@@ -189,22 +178,3 @@ process.on("SIGTERM", async () => {
   await worker.close();
   process.exit(0);
 });
-
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-function parseDate(dateStr: string): Date | null {
-  if (!dateStr) return null;
-  const ddmmyyyy = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (ddmmyyyy) {
-    return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`);
-  }
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function mapNAEnum(value: string): any {
-  if (value === "N/A") {
-    return "NA";
-  }
-  return value;
-}

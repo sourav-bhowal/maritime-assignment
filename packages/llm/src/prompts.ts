@@ -83,31 +83,43 @@ Return ONLY a valid JSON object. No markdown. No code fences. No preamble.
 export function buildValidationPrompt(
   extractions: Array<{
     detection: { documentType: string; documentName: string; applicableRole: string; category: string };
-    holder: { fullName: string | null; dateOfBirth: string | null; nationality: string | null; passportNumber: string | null; sirbNumber: string | null };
+    holder: {
+      fullName: string | null;
+      dateOfBirth: string | null;
+      nationality: string | null;
+      passportNumber: string | null;
+      sirbNumber: string | null;
+    };
     validity: { dateOfIssue: string | null; dateOfExpiry: string | null; isExpired: boolean; daysUntilExpiry: number | null };
-    medicalData: { fitnessResult: string; drugTestResult: string; restrictions: string | null; specialNotes: string | null; expiryDate: string | null };
+    medicalData: {
+      fitnessResult: string;
+      drugTestResult: string;
+      restrictions: string | null;
+      specialNotes: string | null;
+      expiryDate: string | null;
+    };
     flags: Array<{ severity: string; message: string }>;
     summary: string;
-  }>,
+  }>
 ): string {
   const documentSummaries = extractions
     .map(
       (e, i) =>
         `Document ${i + 1}: ${e.detection.documentType} — ${e.detection.documentName}
-  Holder: ${e.holder.fullName ?? "Unknown"}
-  DOB: ${e.holder.dateOfBirth ?? "Unknown"}
-  Nationality: ${e.holder.nationality ?? "Unknown"}
-  Passport: ${e.holder.passportNumber ?? "N/A"}
-  SIRB: ${e.holder.sirbNumber ?? "N/A"}
-  Role: ${e.detection.applicableRole}
-  Category: ${e.detection.category}
-  Issued: ${e.validity.dateOfIssue ?? "Unknown"} | Expires: ${e.validity.dateOfExpiry ?? "Unknown"}
-  Expired: ${e.validity.isExpired} | Days until expiry: ${e.validity.daysUntilExpiry ?? "N/A"}
-  Medical fitness: ${e.medicalData.fitnessResult} | Drug test: ${e.medicalData.drugTestResult}
-  Restrictions: ${e.medicalData.restrictions ?? "None"}
-  Special notes: ${e.medicalData.specialNotes ?? "None"}
-  Flags: ${e.flags.length > 0 ? e.flags.map((f) => `[${f.severity}] ${f.message}`).join("; ") : "None"}
-  Summary: ${e.summary}`,
+          Holder: ${e.holder.fullName ?? "Unknown"}
+          DOB: ${e.holder.dateOfBirth ?? "Unknown"}
+          Nationality: ${e.holder.nationality ?? "Unknown"}
+          Passport: ${e.holder.passportNumber ?? "N/A"}
+          SIRB: ${e.holder.sirbNumber ?? "N/A"}
+          Role: ${e.detection.applicableRole}
+          Category: ${e.detection.category}
+          Issued: ${e.validity.dateOfIssue ?? "Unknown"} | Expires: ${e.validity.dateOfExpiry ?? "Unknown"}
+          Expired: ${e.validity.isExpired} | Days until expiry: ${e.validity.daysUntilExpiry ?? "N/A"}
+          Medical fitness: ${e.medicalData.fitnessResult} | Drug test: ${e.medicalData.drugTestResult}
+          Restrictions: ${e.medicalData.restrictions ?? "None"}
+          Special notes: ${e.medicalData.specialNotes ?? "None"}
+          Flags: ${e.flags.length > 0 ? e.flags.map((f) => `[${f.severity}] ${f.message}`).join("; ") : "None"}
+          Summary: ${e.summary}`
     )
     .join("\n\n");
 

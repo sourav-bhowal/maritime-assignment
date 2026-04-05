@@ -1,3 +1,5 @@
+import { Prisma } from "@repo/database";
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -17,27 +19,36 @@ export function parseDate(dateStr: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+type Extraction = Prisma.ExtractionGetPayload<{
+  include: {
+    fields: true;
+    compliance: true;
+    validity: true;
+    medical: true;
+    flags: true;
+  };
+}>;
+
 /**
  * Format a Prisma extraction record into the API response shape.
  */
-export function formatExtractionResponse(extraction: any) {
+export function formatExtractionResponse(extraction: Extraction) {
   return {
     id: extraction.id,
     sessionId: extraction.sessionId,
     fileName: extraction.fileName,
     documentType: extraction.documentType,
     documentName: extraction.documentName,
-    applicableRole:
-      extraction.applicableRole === "NA" ? "N/A" : extraction.applicableRole,
+    applicableRole: extraction.applicableRole === "NA" ? "N/A" : extraction.applicableRole,
     category: extraction.category,
+    isRequired: extraction.isRequired,
+    detectionReason: extraction.detectionReason,
     confidence: extraction.confidence,
     holderName: extraction.holderName,
-    dateOfBirth: extraction.dateOfBirth
-      ? formatDateString(extraction.dateOfBirth)
-      : null,
+    dateOfBirth: extraction.dateOfBirth ? formatDateString(extraction.dateOfBirth) : null,
     sirbNumber: extraction.sirbNumber,
     passportNumber: extraction.passportNumber,
-    fields: (extraction.fields || []).map((f: any) => ({
+    fields: (extraction.fields || []).map((f) => ({
       key: f.key,
       label: f.label,
       value: f.value,
@@ -46,36 +57,32 @@ export function formatExtractionResponse(extraction: any) {
     })),
     validity: extraction.validity
       ? {
-          dateOfIssue: extraction.validity.dateOfIssue
-            ? formatDateString(extraction.validity.dateOfIssue)
-            : null,
-          dateOfExpiry: extraction.validity.dateOfExpiry
-            ? formatDateString(extraction.validity.dateOfExpiry)
-            : null,
+          dateOfIssue: extraction.validity.dateOfIssue ? formatDateString(extraction.validity.dateOfIssue) : null,
+          dateOfExpiry: extraction.validity.dateOfExpiry ? formatDateString(extraction.validity.dateOfExpiry) : null,
           isExpired: extraction.validity.isExpired,
           daysUntilExpiry: extraction.validity.daysUntilExpiry,
           revalidationRequired: extraction.validity.revalidationRequired,
         }
       : null,
-    compliance: null, // stored in rawLlmResponse, not normalized
-    medicalData: extraction.medical
+    compliance: extraction.compliance
       ? {
-          fitnessResult:
-            extraction.medical.fitnessResult === "NA"
-              ? "N/A"
-              : extraction.medical.fitnessResult,
-          drugTestResult:
-            extraction.medical.drugTestResult === "NA"
-              ? "N/A"
-              : extraction.medical.drugTestResult,
-          restrictions: extraction.medical.restrictions,
-          specialNotes: extraction.medical.specialNotes,
-          expiryDate: extraction.medical.expiryDate
-            ? formatDateString(extraction.medical.expiryDate)
-            : null,
+          issuingAuthority: extraction.compliance.issuingAuthority,
+          regulationReference: extraction.compliance.regulationReference,
+          imoModelCourse: extraction.compliance.imoModelCourse,
+          recognizedAuthority: extraction.compliance.recognizedAuthority,
+          limitations: extraction.compliance.limitations,
         }
       : null,
-    flags: (extraction.flags || []).map((f: any) => ({
+    medicalData: extraction.medical
+      ? {
+          fitnessResult: extraction.medical.fitnessResult === "NA" ? "N/A" : extraction.medical.fitnessResult,
+          drugTestResult: extraction.medical.drugTestResult === "NA" ? "N/A" : extraction.medical.drugTestResult,
+          restrictions: extraction.medical.restrictions,
+          specialNotes: extraction.medical.specialNotes,
+          expiryDate: extraction.medical.expiryDate ? formatDateString(extraction.medical.expiryDate) : null,
+        }
+      : null,
+    flags: (extraction.flags || []).map((f) => ({
       severity: f.severity,
       message: f.message,
     })),
@@ -108,25 +115,16 @@ export function deriveOverallHealth(
     isExpired: boolean;
     flags: Array<{ severity: string }>;
     validity?: { daysUntilExpiry: number | null } | null;
-  }>,
+  }>
 ): "OK" | "WARN" | "CRITICAL" {
-  const hasCriticalFlags = extractions.some((e) =>
-    e.flags.some((f) => f.severity === "CRITICAL"),
-  );
+  const hasCriticalFlags = extractions.some((e) => e.flags.some((f) => f.severity === "CRITICAL"));
   const hasExpiredDocs = extractions.some((e) => e.isExpired);
 
   if (hasCriticalFlags || hasExpiredDocs) return "CRITICAL";
 
-  const hasWarningFlags = extractions.some((e) =>
-    e.flags.some(
-      (f) => f.severity === "MEDIUM" || f.severity === "HIGH",
-    ),
-  );
+  const hasWarningFlags = extractions.some((e) => e.flags.some((f) => f.severity === "MEDIUM" || f.severity === "HIGH"));
   const hasExpiringSoon = extractions.some(
-    (e) =>
-      e.validity?.daysUntilExpiry !== null &&
-      e.validity?.daysUntilExpiry !== undefined &&
-      e.validity.daysUntilExpiry <= 90,
+    (e) => e.validity?.daysUntilExpiry !== null && e.validity?.daysUntilExpiry !== undefined && e.validity.daysUntilExpiry <= 90
   );
 
   if (hasWarningFlags || hasExpiringSoon) return "WARN";
@@ -137,12 +135,8 @@ export function deriveOverallHealth(
 /**
  * Detect the dominant role from extraction records.
  */
-export function detectRole(
-  extractions: Array<{ applicableRole: string | null }>,
-): string {
-  const roles = extractions
-    .map((e) => e.applicableRole)
-    .filter((r) => r && r !== "NA" && r !== "N/A" && r !== "BOTH");
+export function detectRole(extractions: Array<{ applicableRole: string | null }>): string {
+  const roles = extractions.map((e) => e.applicableRole).filter((r) => r && r !== "NA" && r !== "N/A" && r !== "BOTH");
 
   if (roles.length === 0) return "N/A";
 

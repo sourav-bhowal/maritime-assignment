@@ -1,6 +1,8 @@
 import { prisma } from "@repo/database";
 import { isQueueHealthy } from "@repo/queue";
 import { Request, Response } from "express";
+import ApiResponse from "../lib/apiResponse.js";
+import AsyncHandler from "../lib/asyncHandler.js";
 
 /**
  * @description Health check controller
@@ -8,7 +10,7 @@ import { Request, Response } from "express";
  * @param res Response object
  */
 
-export const healthController = async (_req: Request, res: Response) => {
+export const healthController = AsyncHandler(async (_req: Request, res: Response) => {
   const startedAt = Date.now();
 
   const uptimeSeconds = Math.floor((Date.now() - startedAt) / 1000);
@@ -23,8 +25,7 @@ export const healthController = async (_req: Request, res: Response) => {
   }
 
   // Check LLM provider (just verify env vars are set)
-  const llmProviderStatus =
-    process.env.LLM_PROVIDER && process.env.LLM_API_KEY ? "OK" : "DOWN";
+  const llmProviderStatus = process.env.LLM_PROVIDER && process.env.LLM_API_KEY ? "OK" : "DOWN";
 
   // Check queue (Redis)
   let queueStatus: "OK" | "DOWN" = "DOWN";
@@ -34,18 +35,23 @@ export const healthController = async (_req: Request, res: Response) => {
     queueStatus = "DOWN";
   }
 
-  const overallStatus =
-    dbStatus === "OK" && llmProviderStatus === "OK" ? "OK" : "DEGRADED";
+  const overallStatus = dbStatus === "OK" && llmProviderStatus === "OK" ? "OK" : "DEGRADED";
 
-  res.status(overallStatus === "OK" ? 200 : 503).json({
-    status: overallStatus,
-    version: "1.0.0",
-    uptime: uptimeSeconds,
-    dependencies: {
-      database: dbStatus,
-      llmProvider: llmProviderStatus,
-      queue: queueStatus,
-    },
-    timestamp: new Date().toISOString(),
-  });
-};
+  res.status(overallStatus === "OK" ? 200 : 503).json(
+    new ApiResponse({
+      message: "Health check completed.",
+      statusCode: overallStatus === "OK" ? 200 : 503,
+      data: {
+        status: overallStatus,
+        version: "1.0.0",
+        uptime: uptimeSeconds,
+        dependencies: {
+          database: dbStatus,
+          llmProvider: llmProviderStatus,
+          queue: queueStatus,
+        },
+        timestamp: new Date().toISOString(),
+      },
+    })
+  );
+});

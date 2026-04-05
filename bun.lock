@@ -35,6 +35,7 @@
         "@repo/database": "*",
         "@repo/llm": "*",
         "@repo/queue": "*",
+        "@repo/validation": "*",
       },
       "devDependencies": {
         "@repo/typescript-config": "*",
@@ -114,6 +115,7 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
+        "@repo/database": "*",
         "@repo/typescript-config": "*",
         "@types/bun": "latest",
       },

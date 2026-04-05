@@ -13,12 +13,7 @@ interface AppError extends Error {
 /**
  * Global error handler middleware.
  */
-export function errorHandler(
-  err: AppError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-): void {
+export function errorHandler(err: AppError, _req: Request, res: Response, _next: NextFunction): void {
   const statusCode = err.statusCode || 500;
   const code = err.code || "INTERNAL_ERROR";
 
@@ -39,7 +34,7 @@ export function createAppError(
   message: string,
   statusCode: number,
   code: string,
-  extras?: { extractionId?: string; retryAfterMs?: number | null },
+  extras?: { extractionId?: string; retryAfterMs?: number | null }
 ): AppError {
   const err = new Error(message) as AppError;
   err.statusCode = statusCode;
