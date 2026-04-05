@@ -76,7 +76,14 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
 
   if (existing) {
     res.set("X-Deduplicated", "true");
-    res.status(200).json(formatExtractionResponse(existing));
+    res.status(200).json(
+      new ApiResponse({
+        message: "Extraction result retrieved from cache based on file hash.",
+        statusCode: 200,
+        data: formatExtractionResponse(existing),
+      })
+    );
+
     return;
   }
 
@@ -162,8 +169,6 @@ export const extractController = AsyncHandler(async (req: Request, res: Response
   }
 
   const processingTimeMs = Date.now() - startTime;
-
-  console.log("Result from LLM:", result);
 
   // Store the extraction result
   const extraction = await prisma.extraction.create({
