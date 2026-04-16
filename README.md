@@ -6,7 +6,7 @@ This repository contains the backend evaluation assignment for maritime document
 
 1. Clone the repository and navigate to the root directory.
 
-2. Run the docker compose command to set up postgres and redis:
+2. Run the docker compose command to set up postgres and redis or use the shared cloud instances:
 
 ```bash
 docker compose up -d

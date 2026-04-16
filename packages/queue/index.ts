@@ -28,6 +28,44 @@ export interface ExtractionJobResult {
  */
 export type JobStatusType = "QUEUED" | "PROCESSING" | "COMPLETE" | "FAILED";
 
+// ─── Safeguards Config ──────────────────────────────────────────────
+
+const MAX_QUEUED_JOBS = Number(process.env.MAX_QUEUED_JOBS ?? 500); // max jobs in waiting/delayed/prioritized before backpressure kicks in
+const REJECT_WHEN_UNHEALTHY = (process.env.REJECT_WHEN_UNHEALTHY ?? "true") === "true"; // whether to reject new jobs when Redis connection is unhealthy
+const JOB_ATTEMPTS = Number(process.env.JOB_ATTEMPTS ?? 3); // total attempts (initial + retries) for each job
+const JOB_BACKOFF_DELAY_MS = Number(process.env.JOB_BACKOFF_DELAY_MS ?? 2000); // initial backoff delay for retries (exponential backoff will multiply this)
+const JOB_REMOVE_ON_COMPLETE_COUNT = Number(process.env.JOB_REMOVE_ON_COMPLETE_COUNT ?? 100); // how many completed jobs to keep before auto-removing (0 = remove immediately, or use age-based removal in worker settings)
+const JOB_REMOVE_ON_FAIL_COUNT = Number(process.env.JOB_REMOVE_ON_FAIL_COUNT ?? 500); // how many failed jobs to keep before auto-removing (0 = remove immediately, or use age-based removal in worker settings)
+
+interface QueueAppError extends Error {
+  statusCode: number;
+  code: string;
+  retryAfterMs?: number;
+}
+
+export class QueueBackpressureError extends Error implements QueueAppError {
+  statusCode = 429;
+  code = "QUEUE_BUSY";
+
+  constructor(message = "Queue is busy. Please retry later.", retryAfterMs?: number) {
+    super(message);
+    this.name = "QueueBackpressureError";
+    this.retryAfterMs = retryAfterMs;
+  }
+
+  retryAfterMs?: number;
+}
+
+export class QueueUnavailableError extends Error implements QueueAppError {
+  statusCode = 503;
+  code = "QUEUE_UNAVAILABLE";
+
+  constructor(message = "Queue is unavailable. Please retry later.") {
+    super(message);
+    this.name = "QueueUnavailableError";
+  }
+}
+
 // ─── Redis Connection ────────────────────────────────────────────────
 
 /**
@@ -97,6 +135,11 @@ export function getExtractionQueueEvents(): QueueEvents {
   return extractionQueueEvents;
 }
 
+async function getQueuedDepth(queue: Queue<ExtractionJobData, ExtractionJobResult>): Promise<number> {
+  const counts = await queue.getJobCounts("waiting", "delayed", "prioritized");
+  return (counts.waiting ?? 0) + (counts.delayed ?? 0) + (counts.prioritized ?? 0);
+}
+
 // ─── Enqueue ─────────────────────────────────────────────────────────
 
 /**
@@ -106,8 +149,26 @@ export function getExtractionQueueEvents(): QueueEvents {
  */
 export async function enqueueExtraction(data: ExtractionJobData): Promise<Job<ExtractionJobData, ExtractionJobResult>> {
   const queue = getExtractionQueue();
+
+  if (REJECT_WHEN_UNHEALTHY) {
+    const healthy = await isQueueHealthy();
+    if (!healthy) {
+      throw new QueueUnavailableError();
+    }
+  }
+
+  const queuedDepth = await getQueuedDepth(queue);
+  if (queuedDepth >= MAX_QUEUED_JOBS) {
+    const retryAfterMs = await getEstimatedWaitMs();
+    throw new QueueBackpressureError(`Queue capacity reached (${queuedDepth}/${MAX_QUEUED_JOBS}).`, retryAfterMs);
+  }
+
   const job = await queue.add("extract", data, {
     jobId: data.extractionId, // use extractionId as the BullMQ job ID for easy lookup
+    attempts: JOB_ATTEMPTS,
+    backoff: { type: "exponential", delay: JOB_BACKOFF_DELAY_MS },
+    removeOnComplete: { count: JOB_REMOVE_ON_COMPLETE_COUNT },
+    removeOnFail: { count: JOB_REMOVE_ON_FAIL_COUNT },
   });
   return job;
 }

@@ -24,6 +24,20 @@ Maritime PDFs and scans often need **5–15 seconds** of vision LLM work. Long H
 
 **Failure modes today:** Redis outage blocks enqueue/consume; queue backlog can grow during provider slowdowns; duplicate processing is possible around crash/retry boundaries if handlers are not fully idempotent; retry storms can happen without guardrails when provider errors are systemic.
 
+### Queue Safeguards (Implemented)
+
+The queue now applies explicit admission and retry safeguards before accepting new extraction jobs:
+
+- **Health-gated enqueue:** when `REJECT_WHEN_UNHEALTHY=true`, enqueue is rejected if Redis/queue health check fails.
+- **Backpressure cap:** enqueue is rejected when queued depth (`waiting + delayed + prioritized`) reaches `MAX_QUEUED_JOBS`.
+- **Typed overload errors:**
+	- `QUEUE_UNAVAILABLE` (`503`) when queue connectivity is unhealthy.
+	- `QUEUE_BUSY` (`429`) when queue depth is above capacity, including `retryAfterMs` guidance.
+- **Retry policy:** per-job `attempts` + exponential `backoff` are enforced at enqueue for transient failures.
+- **Retention policy:** completed/failed job history is bounded with `removeOnComplete` and `removeOnFail` count limits to control Redis growth.
+
+Runtime tuning is environment-driven: `MAX_QUEUED_JOBS`, `REJECT_WHEN_UNHEALTHY`, `JOB_ATTEMPTS`, `JOB_BACKOFF_DELAY_MS`, `JOB_REMOVE_ON_COMPLETE_COUNT`, `JOB_REMOVE_ON_FAIL_COUNT`.
+
 ---
 
 ## Rate limiting
